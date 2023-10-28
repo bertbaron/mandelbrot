@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Mandelbrot</title>
+    <meta charset="UTF-8"/>
+    <meta name="description" content="Online Mandelbrot viewer with full-screen mode, pretty deep zoom and permalinks to bookmark or share. Not (yet) mobile friendly."/>
+    <link rel="stylesheet" href="./style.css"/>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+
+    <!-- Global site tag (gtag.js) - Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-QTDVGKLBCH"></script>
+    <!-- prettier-ignore -->
+    <script>
+        if(window.location.hostname !== 'localhost') {
+            window.dataLayer = window.dataLayer || [];
+            function gtag() {dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-QTDVGKLBCH');
+        }
+    </script>
+</head>
+<body id="app">
+<div id="main">
+    <div class="vert-container">
+        <div id="mandelbrot">
+            <canvas id="mandelbrot-canvas"></canvas>
+            <canvas id="progress-canvas" width="20" height="20"></canvas>
+        </div>
+        <canvas id="palette-canvas" hidden width="800" height="20"></canvas>
+    </div>
+    <div id="settings">
+        <div class="row">
+            <p>Note that this is still a work in progress. Permalinks might not work in future versions or lead to a differently rendered or colored image.</p>
+        <div class="row">
+            <label for="max-iterations">Max iterations (<kbd>+</kbd>/<kbd>-</kbd>)</label>
+            <input id="max-iterations" type="number" value="1000" step="100"/>
+        </div>
+        <div class="row">
+            <span><kbd>f</kbd> Toggle fullscreen</span>
+        </div>
+        <div class="row">
+            <span><kbd>s</kbd> Toggle Smooth</span>
+        <div class="row">
+            <span><kbd>Backspace</kbd> Reset view</span>
+        </div>
+        <div class="row">
+            <span id="value"></span>
+        </div>
+    </div>
+</div>
+
+<script type="module" src="./index.js"></script>
+</body>
+</html>
