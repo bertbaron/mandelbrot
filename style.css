@@ -45,6 +45,13 @@ kbd {
     font-family: monospace;
 }
 
+footer {
+    font-family: var(--sans-font-family);
+    font-size: 80%;
+    text-align: left;
+    padding-top: 10px;
+}
+
 @media all and (display-mode: fullscreen) {
     #app {
         margin: 0;
