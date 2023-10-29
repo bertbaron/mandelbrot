@@ -276,16 +276,6 @@ class Mandelbrot {
         let i = fxp.fromNumber(y, this.precision).subtract(h.divide(fxp.fromNumber(2, this.precision))).divide(scale)
         return [r.add(center[0]), i.add(center[1])]
     }
-
-    // complex2canvas(r, i) {
-    //     const w = this.width
-    //     const h = this.height
-    //     let scale = this.zoom * w / 4
-    //     let center = this.center
-    //     let x = r - center[0]
-    //     let y = i - center[1]
-    //     return [x * scale + w / 2, y * scale + h / 2]
-    // }
 }
 
 class Offscreen {
@@ -544,7 +534,8 @@ function onMouseDown(evt) {
 
 function onMouseMove(evt) {
     updateMousePos(evt)
-    if ((evt.buttons & 1) === 0) {
+    if (evt.type === "mousemove" && (evt.buttons & 1) === 0) {
+        // Avoid dragging whem the mouse is hovered onto the canvas from the outside
         dragStart = null
         return
     }
@@ -590,18 +581,16 @@ function onMouseUp(evt) {
 }
 
 function updateMousePos(evt) {
-    lastX = evt.offsetX || (evt.pageX - canvasElement.offsetLeft)
-    lastY = evt.offsetY || (evt.pageY - canvasElement.offsetTop)
+    if (evt.touches && evt.touches.length > 0) {
+        lastX = evt.touches[0].pageX - canvasElement.offsetLeft
+        lastY = evt.touches[0].pageY - canvasElement.offsetTop
+    } else {
+        lastX = evt.offsetX || (evt.pageX - canvasElement.offsetLeft)
+        lastY = evt.offsetY || (evt.pageY - canvasElement.offsetTop)
+    }
 }
 
 function onResize() {
-    // if (document.fullscreenElement) {
-    //     canvasElement.width = screen.width
-    //     canvasElement.height = screen.height
-    // } else {
-    //     canvasElement.width = 800
-    //     canvasElement.height = 600
-    // }
     console.log(`Resized to ${canvasElement.offsetWidth}x${canvasElement.offsetHeight}`)
     canvasElement.width = canvasElement.offsetWidth
     canvasElement.height = canvasElement.offsetHeight
@@ -618,6 +607,8 @@ function resizeTmpCanvas() {
     tempCanvas.height = canvasElement.height
 }
 
+const debugElement = document.getElementById('debug')
+
 const appElement = document.getElementById('app')
 const iterationsElement = document.getElementById('max-iterations')
 const fullScreenElement = document.getElementById('fullscreen')
@@ -630,7 +621,44 @@ canvasElement.addEventListener('mouseup', onMouseUp)
 canvasElement.addEventListener('DOMMouseScroll', handleScroll, false)
 canvasElement.addEventListener('mousewheel', handleScroll, false)
 
-// document.addEventListener('fullscreenchange', onFullscreenChange)
+let lastTouchDistance = null
+let lastTouchCenter = null
+canvasElement.addEventListener('touchstart', (evt) => {
+    if (evt.touches.length === 1) {
+        onMouseDown(evt)
+    }
+    if (evt.touches.length === 2) {
+        lastTouchDistance = Math.hypot(evt.touches[0].pageX - evt.touches[1].pageX, evt.touches[0].pageY - evt.touches[1].pageY)
+        lastTouchCenter = [(evt.touches[0].pageX + evt.touches[1].pageX)/2, (evt.touches[0].pageY + evt.touches[1].pageY)/2]
+    }
+    // evt.preventDefault()
+})
+canvasElement.addEventListener('touchmove', (evt) => {
+    if (evt.touches.length === 1) {
+        onMouseMove(evt)
+        if (!document.fullscreenElement == null) {
+            // no preventDefault in full-screen mode because this may be used to exit full-screen
+            evt.preventDefault()
+        }
+    }
+    if (evt.touches.length === 2) {
+        const newTouchDistance = Math.hypot(evt.touches[0].pageX - evt.touches[1].pageX, evt.touches[0].pageY - evt.touches[1].pageY)
+        const newTouchCenter = [(evt.touches[0].pageX + evt.touches[1].pageX)/2, (evt.touches[0].pageY + evt.touches[1].pageY)/2]
+        const delta = newTouchDistance - lastTouchDistance
+        lastX = newTouchCenter[0] - canvasElement.offsetLeft
+        lastY = newTouchCenter[1] - canvasElement.offsetTop
+        zoom(delta/10, 0) // FIXME calculate a proper delta to correspond with touch positions
+        lastTouchDistance = newTouchDistance
+        lastTouchCenter = newTouchCenter
+        evt.preventDefault()
+    }
+})
+canvasElement.addEventListener('touchend', (evt) => {
+    onMouseUp(evt)
+    lastTouchDistance = null
+    lastTouchCenter = null
+    // evt.preventDefault()
+})
 
 iterationsElement.addEventListener('change', (event) => {
     setIterations(parseInt(event.target.value))
@@ -642,12 +670,8 @@ smoothElement.addEventListener('change', (event) => {
     fractal.smooth = event.target.checked
     redraw()
 })
-fullScreenElement.addEventListener('change', (event) => {
-    if (event.target.checked) {
-        document.documentElement.requestFullscreen()
-    } else {
-        document.exitFullscreen()
-    }
+fullScreenElement.addEventListener('click', (event) => {
+    document.documentElement.requestFullscreen()
 })
 
 function reset() {
@@ -684,10 +708,8 @@ appElement.addEventListener('keydown', (event) => {
     if (event.key === 'f') {
         if (document.fullscreenElement) {
             document.exitFullscreen()
-            fullScreenElement.checked = false
         } else {
             document.documentElement.requestFullscreen()
-            fullScreenElement.checked = true
         }
     }
 })

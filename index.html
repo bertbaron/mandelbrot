@@ -29,37 +29,41 @@
     <div class="vert-container">
         <div id="mandelbrot">
             <canvas id="mandelbrot-canvas"></canvas>
-            <canvas id="progress-canvas" width="20" height="20"></canvas>
         </div>
+        <canvas id="progress-canvas" width="20" height="20"></canvas>
         <canvas id="palette-canvas" hidden width="800" height="20"></canvas>
     </div>
     <div id="settings">
         <div class="row">
-            <label for="max-iterations">Max iterations (<kbd>+</kbd>/<kbd>-</kbd>)</label>
-            <input id="max-iterations" type="number" value="1000" step="100"/>
+            <label for="max-iterations">Max iterations</label>
+            <input id="max-iterations" type="number" value="1000" step="100" title="+/-"/>
+        </div>
+        <div class="row" style="display: none">
+            <label for="smooth">Smooth</label>
+            <input id="smooth" title="s" type="checkbox"/>
         </div>
         <div class="row">
-            <label for="fullscreen">Fullscreen (<kbd>f</kbd>)</label>
-            <input id="fullscreen" type="checkbox"/>
+            <button id="fullscreen" title="f">Fullscreen</button>
         </div>
         <div class="row">
-            <label for="smooth">Smooth (<kbd>s</kbd>)</label>
-            <input id="smooth" type="checkbox"/>
-        </div>
-        <div class="row">
-            <button id="reset">Reset view (<kbd>Backspace</kbd>)</button>
+            <button id="reset" title="backspace">Reset view</button>
         </div>
         <div class="row">
             <span id="value"></span>
         </div>
-        <footer>
-            <a href="https://github.com/bertbaron/mandelbrot" target="_blank">
-                Sources
-            </a> |
-            <a href="https://github.com/bertbaron/mandelbrot/issues" target="_blank">
-                Issue Tracker
-            </a>
-        </footer>
+        <div class="row">
+            <textarea id="debug" readonly hidden></textarea>
+        </div>
+        <div class="row">
+            <footer>
+                <a href="https://github.com/bertbaron/mandelbrot" target="_blank">
+                    Sources
+                </a> |
+                <a href="https://github.com/bertbaron/mandelbrot/issues" target="_blank">
+                    Issue Tracker
+                </a>
+            </footer>
+        </div>
     </div>
 </div>
 

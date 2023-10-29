@@ -1,6 +1,6 @@
 :root {
-    --sans-font-family: system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue","Noto Sans","Liberation Sans",Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","Noto Color Emoji";
-    font-size: 110%;
+    --sans-font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    font-size: 180%;
 }
 
 #main {
@@ -15,12 +15,9 @@
 .vert-container {
     display: inline-flex;
     flex-direction: column;
-    align-items:
-            center;
+    align-items: center;
     justify-content: center;
     gap: 8px;
-    /*border: #4d4d4d solid 1px;*/
-    /*border-radius: 5px;*/
     padding: 10px;
 }
 
@@ -57,7 +54,38 @@ footer {
     padding-top: 10px;
 }
 
+.row {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    padding-top: 5px;
+}
+input {
+    font-size: inherit;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 5px;
+}
+#max-iterations {
+    width: 4em;
+}
+
+button {
+    font-size: inherit;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 5px;
+    background-color: #55e1a0;
+    cursor: pointer;
+    /* nice green color */
+}
+
 @media all and (max-width: 1200px) {
+    :root {
+        font-size: 5vw;
+    }
     #main {
         flex-direction: column;
     }
@@ -69,13 +97,15 @@ footer {
 }
 
 /*In full-screen mode only show the canvas and progress indicator*/
-@media all and (display-mode: fullscreen) {
+:fullscreen {
     #app {
         margin: 0;
     }
+
     #main {
         padding: 0;
     }
+
     .vert-container {
         padding: 0;
     }
