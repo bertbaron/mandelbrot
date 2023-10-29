@@ -1,3 +1,8 @@
+:root {
+    --sans-font-family: system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue","Noto Sans","Liberation Sans",Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","Noto Color Emoji";
+    font-size: 110%;
+}
+
 #main {
     display: flex;
     flex-direction: row;
@@ -52,6 +57,18 @@ footer {
     padding-top: 10px;
 }
 
+@media all and (max-width: 1200px) {
+    #main {
+        flex-direction: column;
+    }
+
+    #mandelbrot-canvas {
+        width: min(800px, 100vw);
+        height: min(600px, 75svw);
+    }
+}
+
+/*In full-screen mode only show the canvas and progress indicator*/
 @media all and (display-mode: fullscreen) {
     #app {
         margin: 0;
@@ -72,5 +89,3 @@ footer {
         height: 100vh;
     }
 }
-
-

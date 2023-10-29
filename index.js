@@ -620,6 +620,9 @@ function resizeTmpCanvas() {
 
 const appElement = document.getElementById('app')
 const iterationsElement = document.getElementById('max-iterations')
+const fullScreenElement = document.getElementById('fullscreen')
+const smoothElement = document.getElementById('smooth')
+const resetElement = document.getElementById('reset')
 canvasElement.addEventListener('mousedown', onMouseDown)
 canvasElement.addEventListener('mousemove', onMouseMove)
 canvasElement.addEventListener('mouseup', onMouseUp)
@@ -635,18 +638,36 @@ iterationsElement.addEventListener('change', (event) => {
 iterationsElement.addEventListener('keydown', (event) => {
     event.stopPropagation()
 })
+smoothElement.addEventListener('change', (event) => {
+    fractal.smooth = event.target.checked
+    redraw()
+})
+fullScreenElement.addEventListener('change', (event) => {
+    if (event.target.checked) {
+        document.documentElement.requestFullscreen()
+    } else {
+        document.exitFullscreen()
+    }
+})
 
+function reset() {
+    fractal.setZoom(fxp.fromNumber(1))
+    fractal.setCenter([fxp.fromNumber(-0.5), fxp.fromNumber(0)])
+    if (!setIterations(DEFAULT_ITERATIONS)) {
+        redraw()
+    }
+}
+
+resetElement.addEventListener('click', (event) => {
+    reset();
+})
 appElement.addEventListener('keydown', (event) => {
     if (event.key === 'r') {
         // console.log('redraw')
         redraw(true)
     }
     if (event.key === 'Backspace') {
-        fractal.setZoom(fxp.fromNumber(1))
-        fractal.setCenter([fxp.fromNumber(-0.5), fxp.fromNumber(0)])
-        if (!setIterations(DEFAULT_ITERATIONS)) {
-            redraw()
-        }
+        reset()
     }
 
     if (event.key === '+' || event.key === '=') {
@@ -657,13 +678,16 @@ appElement.addEventListener('keydown', (event) => {
     }
     if (event.key === 's') {
         fractal.smooth = !fractal.smooth
+        smoothElement.checked = fractal.smooth
         redraw()
     }
     if (event.key === 'f') {
         if (document.fullscreenElement) {
             document.exitFullscreen()
+            fullScreenElement.checked = false
         } else {
             document.documentElement.requestFullscreen()
+            fullScreenElement.checked = true
         }
     }
 })
@@ -696,6 +720,7 @@ function init() {
     // resizeTmpCanvas()
     onResize()
     iterationsElement.value = fractal.max_iter
+    smoothElement.checked = fractal.smooth
     fractal.initPallet()
     redraw()
 }

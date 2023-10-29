@@ -3,7 +3,8 @@
 <head>
     <title>Mandelbrot</title>
     <meta charset="UTF-8"/>
-    <meta name="description" content="Online Mandelbrot viewer with full-screen mode, pretty deep zoom and permalinks to bookmark or share. Not (yet) mobile friendly."/>
+    <meta name="description"
+          content="Online Mandelbrot viewer with full-screen mode, pretty deep zoom and permalinks to bookmark or share. Not (yet) mobile friendly."/>
     <link rel="stylesheet" href="./style.css"/>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
 
@@ -11,9 +12,13 @@
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-QTDVGKLBCH"></script>
     <!-- prettier-ignore -->
     <script>
-        if(window.location.hostname !== 'localhost') {
+        if (window.location.hostname !== 'localhost') {
             window.dataLayer = window.dataLayer || [];
-            function gtag() {dataLayer.push(arguments);}
+
+            function gtag() {
+                dataLayer.push(arguments);
+            }
+
             gtag('js', new Date());
             gtag('config', 'G-QTDVGKLBCH');
         }
@@ -30,18 +35,19 @@
     </div>
     <div id="settings">
         <div class="row">
-            <p>Note that this is still a work in progress. Permalinks might not work in future versions or lead to a differently rendered or colored image.</p>
-        <div class="row">
             <label for="max-iterations">Max iterations (<kbd>+</kbd>/<kbd>-</kbd>)</label>
             <input id="max-iterations" type="number" value="1000" step="100"/>
         </div>
         <div class="row">
-            <span><kbd>f</kbd> Toggle fullscreen</span>
+            <label for="fullscreen">Fullscreen (<kbd>f</kbd>)</label>
+            <input id="fullscreen" type="checkbox"/>
         </div>
         <div class="row">
-            <span><kbd>s</kbd> Toggle Smooth</span>
+            <label for="smooth">Smooth (<kbd>s</kbd>)</label>
+            <input id="smooth" type="checkbox"/>
+        </div>
         <div class="row">
-            <span><kbd>Backspace</kbd> Reset view</span>
+            <button id="reset">Reset view (<kbd>Backspace</kbd>)</button>
         </div>
         <div class="row">
             <span id="value"></span>
