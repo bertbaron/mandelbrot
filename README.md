@@ -3,6 +3,8 @@ Online Mandelbrot Explorer
 
 Requires a modern browser with support for BigInt and Web Workers.
 
+A live version can be found here: https://bertbaron.github.io/mandelbrot/
+
 ## Implementation
 
 This is currently a pure javascript implementation of the Mandelbrot set. I actually started this to play with Web Assembly but soon figured out that javascript on modern browsers is quite fast and hard to outperform with Web Assembly. Since the algorithm matters more than the language, I decided to start with a javascript implementation. I might move parts to Web Assembly later once I have a nice reference implementation in javascript.

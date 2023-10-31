@@ -4,7 +4,8 @@
     <title>Mandelbrot</title>
     <meta charset="UTF-8"/>
     <meta name="description"
-          content="Online Mandelbrot viewer with full-screen mode, pretty deep zoom and permalinks to bookmark or share. Not (yet) mobile friendly."/>
+          content="Mobile-friendely online Mandelbrot viewer with full-screen mode, pretty deep zoom and permalinks to bookmark or share."/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="./style.css"/>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
 
@@ -29,8 +30,9 @@
     <div class="vert-container">
         <div id="mandelbrot">
             <canvas id="mandelbrot-canvas"></canvas>
+            <canvas id="progress-canvas" width="20" height="20"></canvas>
+            <textarea id="debug" readonly hidden></textarea>
         </div>
-        <canvas id="progress-canvas" width="20" height="20"></canvas>
         <canvas id="palette-canvas" hidden width="800" height="20"></canvas>
     </div>
     <div id="settings">
@@ -50,9 +52,6 @@
         </div>
         <div class="row">
             <span id="value"></span>
-        </div>
-        <div class="row">
-            <textarea id="debug" readonly hidden></textarea>
         </div>
         <div class="row">
             <footer>

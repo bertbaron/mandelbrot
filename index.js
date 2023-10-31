@@ -254,7 +254,7 @@ class Mandelbrot {
         this.jobStartTime = performance.now()
         this.permalinkUpdated = false
         this.resetStats()
-        console.log('Rendering...')
+        // console.log('Rendering...')
         this.startNextJob(resetCaches)
     }
 
@@ -363,8 +363,9 @@ class ProgressMonitor {
             this._draw(percent)
         }
         if (this.done === this.tasks) {
+            this._draw(100)
             const jobTime = now - this.startTime
-            console.log(`Rendering completed in ${jobTime.toFixed(0)}ms`)
+            // console.log(`Rendering completed in ${jobTime.toFixed(0)}ms`)
             this.canvas.style.display = 'none'
         }
     }
@@ -487,26 +488,28 @@ let dragStart = null
 
 const scaleFactor = 1.1;
 
-function zoom(clicks, cooldown) {
-    const scale = fractal.precision
-    const lowerBound = MIN_ZOOM.withScale(scale)
-    if (fractal.zoom.leq(lowerBound) && clicks < 0) return
+function zoomWithClicks(clicks, cooldown) {
+    zoomWithFactor(Math.pow(scaleFactor, clicks), cooldown)
+}
 
+function zoomWithFactor(factor, cooldown) {
+    const lowerBound = MIN_ZOOM.withScale(fractal.precision)
+    if (fractal.zoom.leq(lowerBound) && factor < 1) return
+    let bigFactor = fxp.fromNumber(factor, fractal.precision);
     const ptr = fractal.canvas2complex(lastX, lastY)
     fractal.setCenter(ptr)
-    let factor = fxp.fromNumber(Math.pow(scaleFactor, clicks), scale);
-    fractal.setZoom(fractal.zoom.multiply(factor).max(lowerBound))
+    fractal.setZoom(fractal.zoom.multiply(bigFactor).max(lowerBound))
     const newPtr = fractal.canvas2complex(lastX, lastY)
     fractal.setCenter([fractal.center[0].add(ptr[0].subtract(newPtr[0])), fractal.center[1].add(ptr[1].subtract(newPtr[1]))])
 
-    scalesCanvas(factor.toNumber(), lastX, lastY)
+    scalesCanvas(bigFactor.toNumber(), lastX, lastY)
     redraw(false, cooldown);
 }
 
 function handleScroll(evt) {
     updateMousePos(evt)
-    const delta = evt.wheelDelta ? evt.wheelDelta / 40 : evt.detail ? -evt.detail : 0
-    if (delta) zoom(delta, 0) // TODO only apply a cooldown when rendering takes long
+    const delta = evt.wheelDelta ? evt.wheelDelta / 40 : (evt.detail ? -evt.detail : 0)
+    if (delta) zoomWithClicks(delta, 0) // TODO only apply a cooldown when rendering takes long
     evt.preventDefault()
 }
 
@@ -553,8 +556,6 @@ function onMouseMove(evt) {
 // scales the current canvas image by the given factor around the given point
 // This gives immediate feedback to the user, while the fractal is being rendered in the background
 function scalesCanvas(factor, x, y) {
-    // TODO Scale from original (last rendered) images to reduce distortion
-    console.log(`Scaling canvas by ${factor} around (${x},${y})`)
     const tempCtx = tempCanvas.getContext('2d');
     tempCtx.drawImage(canvasElement, 0, 0);
     const ctx = canvasElement.getContext('2d');
@@ -581,23 +582,56 @@ function onMouseUp(evt) {
 }
 
 function updateMousePos(evt) {
+    let x, y
     if (evt.touches && evt.touches.length > 0) {
-        lastX = evt.touches[0].pageX - canvasElement.offsetLeft
-        lastY = evt.touches[0].pageY - canvasElement.offsetTop
+        x = evt.touches[0].pageX - canvasElement.offsetLeft
+        y = evt.touches[0].pageY - canvasElement.offsetTop
     } else {
-        lastX = evt.offsetX || (evt.pageX - canvasElement.offsetLeft)
-        lastY = evt.offsetY || (evt.pageY - canvasElement.offsetTop)
+        x = evt.offsetX || (evt.pageX - canvasElement.offsetLeft)
+        y = evt.offsetY || (evt.pageY - canvasElement.offsetTop)
     }
+    // lastX = Math.round(x / canvasElement.offsetWidth * canvasElement.width)
+    // lastY = Math.round(y / canvasElement.offsetHeight * canvasElement.height)
+    [lastX, lastY] = toGraphicsCoordinates(x, y)
 }
 
-function onResize() {
-    console.log(`Resized to ${canvasElement.offsetWidth}x${canvasElement.offsetHeight}`)
-    canvasElement.width = canvasElement.offsetWidth
-    canvasElement.height = canvasElement.offsetHeight
+function toGraphicsCoordinates(x, y) {
+    return [x / canvasElement.offsetWidth * canvasElement.width, y / canvasElement.offsetHeight * canvasElement.height]
+}
+
+function onResize(entries) {
+    let debugText = `${canvasElement.offsetWidth}x${canvasElement.offsetHeight}`
+
+    let width = canvasElement.offsetWidth
+    let height = canvasElement.offsetHeight
+
+    if (entries && entries.length > 0) {
+        const entry = entries[0]
+        if (entry.devicePixelContentBoxSize) {
+            const w = entry.devicePixelContentBoxSize[0].inlineSize
+            const h = entry.devicePixelContentBoxSize[0].blockSize
+            debugText += ` / ${w}x${h}`
+            width = w
+            height = h
+        }
+    }
+    debugElement.value = debugText
+
+    canvasElement.width = width
+    canvasElement.height = height
+
     resizeTmpCanvas()
     fractal.resized()
     showZoomFactor()
-    redraw();
+    redraw()
+}
+
+function toggleFullScreen() {
+    if (document.fullscreenElement) {
+        document.exitFullscreen()
+    } else {
+        document.getElementById('mandelbrot').requestFullscreen()
+    }
 }
 
 new ResizeObserver(onResize).observe(canvasElement)
@@ -631,12 +665,12 @@ canvasElement.addEventListener('touchstart', (evt) => {
         lastTouchDistance = Math.hypot(evt.touches[0].pageX - evt.touches[1].pageX, evt.touches[0].pageY - evt.touches[1].pageY)
         lastTouchCenter = [(evt.touches[0].pageX + evt.touches[1].pageX)/2, (evt.touches[0].pageY + evt.touches[1].pageY)/2]
     }
-    // evt.preventDefault()
+    evt.preventDefault()
 })
 canvasElement.addEventListener('touchmove', (evt) => {
     if (evt.touches.length === 1) {
         onMouseMove(evt)
-        if (!document.fullscreenElement == null) {
+        if (document.fullscreenElement != null) {
             // no preventDefault in full-screen mode because this may be used to exit full-screen
             evt.preventDefault()
         }
@@ -644,10 +678,18 @@ canvasElement.addEventListener('touchmove', (evt) => {
     if (evt.touches.length === 2) {
         const newTouchDistance = Math.hypot(evt.touches[0].pageX - evt.touches[1].pageX, evt.touches[0].pageY - evt.touches[1].pageY)
         const newTouchCenter = [(evt.touches[0].pageX + evt.touches[1].pageX)/2, (evt.touches[0].pageY + evt.touches[1].pageY)/2]
-        const delta = newTouchDistance - lastTouchDistance
-        lastX = newTouchCenter[0] - canvasElement.offsetLeft
-        lastY = newTouchCenter[1] - canvasElement.offsetTop
-        zoom(delta/10, 0) // FIXME calculate a proper delta to correspond with touch positions
+        const factor = newTouchDistance / lastTouchDistance;
+
+        [lastX, lastY] = toGraphicsCoordinates(newTouchCenter[0] - canvasElement.offsetLeft, newTouchCenter[1] - canvasElement.offsetTop)
+        const [newX, newY] = toGraphicsCoordinates(lastTouchCenter[0] - canvasElement.offsetLeft, lastTouchCenter[1] - canvasElement.offsetTop)
+
+        // Pan the canvas based on the movement of the center of the two fingers
+        const ptr = fractal.canvas2complex(lastX, lastY)
+        const startPtr = fractal.canvas2complex(newX, newY)
+        fractal.center = [fractal.center[0].add(startPtr[0].subtract(ptr[0])), fractal.center[1].add(startPtr[1].subtract(ptr[1]))]
+        panCanvas(lastX - newX, lastY - newY)
+
+        zoomWithFactor(factor, 0)
         lastTouchDistance = newTouchDistance
         lastTouchCenter = newTouchCenter
         evt.preventDefault()
@@ -671,7 +713,7 @@ smoothElement.addEventListener('change', (event) => {
     redraw()
 })
 fullScreenElement.addEventListener('click', (event) => {
-    document.documentElement.requestFullscreen()
+    toggleFullScreen()
 })
 
 function reset() {
@@ -706,11 +748,7 @@ appElement.addEventListener('keydown', (event) => {
         redraw()
     }
     if (event.key === 'f') {
-        if (document.fullscreenElement) {
-            document.exitFullscreen()
-        } else {
-            document.documentElement.requestFullscreen()
-        }
+        toggleFullScreen()
     }
 })
 
