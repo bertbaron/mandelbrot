@@ -1,10 +1,11 @@
 :root {
     --sans-font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-    font-size: 180%;
+    /*font-size: 120%;*/
 }
 
 body {
     margin: 0;
+    padding: 10px;
 }
 
 #main {
@@ -12,27 +13,19 @@ body {
     flex-direction: row;
     justify-content: center;
     align-items: center;
-    gap: 20px;
-    padding: 20px;
-}
-
-.vert-container {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 10px;
 }
 
 #mandelbrot {
     position: relative;
+    width: 800px;
+    height: 600px;
+    flex-shrink: 0;
 }
 
 #mandelbrot-canvas {
     image-rendering: pixelated;
-    width: 800px;
-    height: 600px;
+    width: 100%;
+    height: 100%;
 }
 
 #progress-canvas {
@@ -40,6 +33,34 @@ body {
     top: 5px;
     left: 5px;
     z-index: 1;
+}
+
+#menu-toggle {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 30px;
+    height: 30px;
+    z-index: 3;
+    border-radius: 5px;
+    padding: 5px;
+    cursor: pointer;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: none;
+}
+
+#palette-canvas {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 20px;
+    z-index: 1;
+}
+
+#settings {
+    margin: 20px;
+    padding: 10px;
 }
 
 kbd {
@@ -54,43 +75,16 @@ kbd {
 footer {
     font-family: var(--sans-font-family);
     font-size: 80%;
-    text-align: left;
+    text-align: center;
     padding-top: 10px;
 }
 
-.row {
-    display: flex;
-    flex-direction: row;
-    justify-content: center;
-    align-items: center;
-    gap: 20px;
-    padding-top: 5px;
-}
-input {
-    font-size: inherit;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    padding: 5px;
-}
-#max-iterations {
-    width: 4em;
-}
 #debug {
     font-size: inherit;
     position: absolute;
     top: 30px;
     left: 5px;
     z-index: 1;
-}
-
-button {
-    font-size: inherit;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    padding: 5px;
-    background-color: #55e1a0;
-    cursor: pointer;
-    /* nice green color */
 }
 
 @media all and (max-width: 1200px) {
@@ -100,8 +94,13 @@ button {
     #main {
         flex-direction: column;
     }
+    #settings {
+        max-width: min(800px, 100vw);
+        padding: 0;
+        margin: 0;
+    }
 
-    #mandelbrot-canvas {
+    #mandelbrot {
         width: min(800px, 100vw);
         height: min(600px, 75svw);
     }
@@ -115,9 +114,44 @@ button {
 }
 
 /*In full-screen mode only show the canvas and progress indicator*/
-:fullscreen {
-    #mandelbrot-canvas {
-        width: 100vw;
-        height: 100vh;
-    }
+#main:fullscreen {
+    position: relative;
+    display: block;
+    padding: 0;
+}
+
+#mandelbrot.fullscreen {
+    width: 100vw;
+    height: 100vh;
+    /*position: fixed;*/
+    /*top: 0;*/
+    /*left: 0;*/
+}
+
+#settings.fullscreen {
+    position: absolute;
+    top: 30px;
+    left: 5px;
+    z-index: 2;
+    border-radius: 5px;
+    max-width: 80vw;
+    background-color: rgba(0, 0, 0, 0.5);
+    visibility: visible;
+    opacity: 1;
+    transition: visibility 0.5s, opacity 0.5s linear;
+}
+#settings.hidden.fullscreen {
+    visibility: hidden;
+    opacity: 0;
+}
+#menu-toggle.fullscreen {
+    display: block;
+}
+#menu-toggle.hidden.fullscreen {
+    background: transparent;
+    border: none !important;
+    font-size:0;
+}
+#footer.fullscreen {
+    display: none;
 }

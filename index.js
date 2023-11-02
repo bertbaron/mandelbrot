@@ -11,8 +11,6 @@ const MAX_PIXEL_SIZE = 16
 
 const MIN_ZOOM = fxp.fromNumber(1)
 
-//                                         253895167634803.88
-
 class MyWorker {
     constructor(taskqueue, resulthandler) {
         this.taskqueue = taskqueue
@@ -226,7 +224,7 @@ class Mandelbrot {
         //     this.offscreens[this.jobLevel].smooth.set(answer.smooth, offset)
         // }
         let offscreen = this.offscreens[this.jobLevel];
-        for (let row=0; row<task.h; row++) {
+        for (let row = 0; row < task.h; row++) {
             let offset = (task.yOffset + row) * offscreen.buffer.width + task.xOffset
             offscreen.values.set(answer.values.subarray(row * task.w, (row + 1) * task.w), offset)
             if (this.smooth) {
@@ -366,6 +364,7 @@ class ProgressMonitor {
             this._draw(100)
             const jobTime = now - this.startTime
             // console.log(`Rendering completed in ${jobTime.toFixed(0)}ms`)
+            document.getElementById('renderTimeValue').innerText = `${jobTime.toFixed(0)}ms`
             this.canvas.style.display = 'none'
         }
     }
@@ -385,7 +384,7 @@ class ProgressMonitor {
         ctx.fill()
         ctx.fillStyle = 'red'
         ctx.beginPath()
-        ctx.arc(centerX, centerY, radius, 0, (1-percentage/100) * 2 * Math.PI)
+        ctx.arc(centerX, centerY, radius, 0, (1 - percentage / 100) * 2 * Math.PI)
         ctx.lineTo(centerX, centerY)
         ctx.fill()
     }
@@ -435,8 +434,10 @@ function initPallet(max_iter) {
 
 function renderPalette(palette) {
     const ctx = paletteCanvasElement.getContext('2d')
-    const width = paletteCanvasElement.width
-    const height = paletteCanvasElement.height
+    const width = paletteCanvasElement.offsetWidth
+    const height = paletteCanvasElement.offsetHeight
+    paletteCanvasElement.width = width
+    paletteCanvasElement.height = height
     const offset = 4
     const paletteSize = palette.length / 4 - offset
     for (let i = 0; i < paletteSize; i++) {
@@ -451,6 +452,16 @@ function renderPalette(palette) {
     }
 }
 
+function initMenu() {
+    const menuToggle = document.getElementById("menu-toggle");
+    menuToggle.addEventListener("click", function (e) {
+        const menu = document.getElementById("settings")
+        menu.classList.toggle("hidden")
+        menuToggle.classList.toggle("hidden")
+    })
+}
+initMenu()
+
 const canvasElement = document.getElementById("mandelbrot-canvas")
 const progressElement = document.getElementById("progress-canvas")
 const paletteCanvasElement = document.getElementById("palette-canvas")
@@ -460,6 +471,7 @@ const tempCanvas = document.createElement('canvas');
 const fractal = new Mandelbrot(canvasElement, new ProgressMonitor(progressElement))
 
 let redrawTimeout = null;
+
 async function redraw(resetCaches, cooldown) {
     showZoomFactor()
     if (redrawTimeout) {
@@ -478,7 +490,7 @@ async function redraw(resetCaches, cooldown) {
 }
 
 function showZoomFactor() {
-    document.getElementById('value').innerText = `Zoom: ${fractal.zoom.toNumber().toExponential(2)}`
+    document.getElementById('zoomValue').innerText = `${fractal.zoom.toNumber().toExponential(2)}`
 }
 
 let lastX = canvasElement.width / 2
@@ -590,8 +602,6 @@ function updateMousePos(evt) {
         x = evt.offsetX || (evt.pageX - canvasElement.offsetLeft)
         y = evt.offsetY || (evt.pageY - canvasElement.offsetTop)
     }
-    // lastX = Math.round(x / canvasElement.offsetWidth * canvasElement.width)
-    // lastY = Math.round(y / canvasElement.offsetHeight * canvasElement.height)
     [lastX, lastY] = toGraphicsCoordinates(x, y)
 }
 
@@ -599,23 +609,33 @@ function toGraphicsCoordinates(x, y) {
     return [x / canvasElement.offsetWidth * canvasElement.width, y / canvasElement.offsetHeight * canvasElement.height]
 }
 
+let devicePixelBoxSize = null
+
 function onResize(entries) {
     let debugText = `${canvasElement.offsetWidth}x${canvasElement.offsetHeight}`
 
-    let width = canvasElement.offsetWidth
-    let height = canvasElement.offsetHeight
-
+    devicePixelBoxSize = null
     if (entries && entries.length > 0) {
         const entry = entries[0]
         if (entry.devicePixelContentBoxSize) {
             const w = entry.devicePixelContentBoxSize[0].inlineSize
             const h = entry.devicePixelContentBoxSize[0].blockSize
-            debugText += ` / ${w}x${h}`
-            width = w
-            height = h
+            devicePixelBoxSize = [w, h]
         }
     }
-    debugElement.value = debugText
+    resizeToCanvasSize()
+}
+
+function resizeToCanvasSize() {
+    let width = canvasElement.offsetWidth
+    let height = canvasElement.offsetHeight
+
+    if (fullResSwitch.checked && devicePixelBoxSize != null) {
+        [width, height] = devicePixelBoxSize
+    }
+
+    document.getElementById('sizeValue').innerText = `${width}x${height}`
+
 
     canvasElement.width = width
     canvasElement.height = height
@@ -630,9 +650,28 @@ function toggleFullScreen() {
     if (document.fullscreenElement) {
         document.exitFullscreen()
     } else {
-        document.getElementById('mandelbrot').requestFullscreen()
+        document.getElementById('main').requestFullscreen()
     }
 }
+
+const ELEMENTS_WITH_FS_CLASS = ['mandelbrot', 'palette-canvas', 'settings', 'footer', 'menu-toggle']
+addEventListener("fullscreenchange", (event) => {
+    if (document.fullscreenElement) {
+        for (let element of ELEMENTS_WITH_FS_CLASS) {
+            document.getElementById(element).classList.add('fullscreen')
+        }
+        document.documentElement.setAttribute('data-bs-theme', 'dark')
+        // hide menu-toggle and menu
+        document.getElementById('menu-toggle').classList.add('hidden')
+        document.getElementById('settings').classList.add('hidden')
+
+    } else {
+        for (let element of ELEMENTS_WITH_FS_CLASS) {
+            document.getElementById(element).classList.remove('fullscreen')
+        }
+        document.documentElement.setAttribute('data-bs-theme', 'light')
+    }
+});
 
 new ResizeObserver(onResize).observe(canvasElement)
 
@@ -645,9 +684,10 @@ const debugElement = document.getElementById('debug')
 
 const appElement = document.getElementById('app')
 const iterationsElement = document.getElementById('max-iterations')
-const fullScreenElement = document.getElementById('fullscreen')
+const fullScreenButton = document.getElementById('fullscreen')
 const smoothElement = document.getElementById('smooth')
 const resetElement = document.getElementById('reset')
+const fullResSwitch = document.getElementById('fullres')
 canvasElement.addEventListener('mousedown', onMouseDown)
 canvasElement.addEventListener('mousemove', onMouseMove)
 canvasElement.addEventListener('mouseup', onMouseUp)
@@ -663,7 +703,7 @@ canvasElement.addEventListener('touchstart', (evt) => {
     }
     if (evt.touches.length === 2) {
         lastTouchDistance = Math.hypot(evt.touches[0].pageX - evt.touches[1].pageX, evt.touches[0].pageY - evt.touches[1].pageY)
-        lastTouchCenter = [(evt.touches[0].pageX + evt.touches[1].pageX)/2, (evt.touches[0].pageY + evt.touches[1].pageY)/2]
+        lastTouchCenter = [(evt.touches[0].pageX + evt.touches[1].pageX) / 2, (evt.touches[0].pageY + evt.touches[1].pageY) / 2]
     }
     evt.preventDefault()
 })
@@ -677,7 +717,7 @@ canvasElement.addEventListener('touchmove', (evt) => {
     }
     if (evt.touches.length === 2) {
         const newTouchDistance = Math.hypot(evt.touches[0].pageX - evt.touches[1].pageX, evt.touches[0].pageY - evt.touches[1].pageY)
-        const newTouchCenter = [(evt.touches[0].pageX + evt.touches[1].pageX)/2, (evt.touches[0].pageY + evt.touches[1].pageY)/2]
+        const newTouchCenter = [(evt.touches[0].pageX + evt.touches[1].pageX) / 2, (evt.touches[0].pageY + evt.touches[1].pageY) / 2]
         const factor = newTouchDistance / lastTouchDistance;
 
         [lastX, lastY] = toGraphicsCoordinates(newTouchCenter[0] - canvasElement.offsetLeft, newTouchCenter[1] - canvasElement.offsetTop)
@@ -712,8 +752,12 @@ smoothElement.addEventListener('change', (event) => {
     fractal.smooth = event.target.checked
     redraw()
 })
-fullScreenElement.addEventListener('click', (event) => {
+fullScreenButton.addEventListener('click', (event) => {
     toggleFullScreen()
+})
+fullResSwitch.addEventListener('change', (event) => {
+    resizeToCanvasSize()
+    redraw()
 })
 
 function reset() {

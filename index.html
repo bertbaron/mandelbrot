@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="light">
 <head>
     <title>Mandelbrot</title>
     <meta charset="UTF-8"/>
@@ -24,48 +24,85 @@
             gtag('config', 'G-QTDVGKLBCH');
         }
     </script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
 </head>
 <body id="app">
 <div id="main">
-    <div class="vert-container">
-        <div id="mandelbrot">
-            <canvas id="mandelbrot-canvas"></canvas>
-            <canvas id="progress-canvas" width="20" height="20"></canvas>
-            <textarea id="debug" readonly hidden></textarea>
-        </div>
-        <canvas id="palette-canvas" hidden width="800" height="20"></canvas>
+    <div id="mandelbrot">
+        <canvas id="mandelbrot-canvas"></canvas>
+        <canvas id="progress-canvas" width="20" height="20"></canvas>
+        <button id="menu-toggle"></button>
+        <textarea id="debug" readonly hidden></textarea>
+        <canvas id="palette-canvas" hidden></canvas>
     </div>
     <div id="settings">
-        <div class="row">
-            <label for="max-iterations">Max iterations</label>
-            <input id="max-iterations" type="number" value="1000" step="100" title="+/-"/>
-        </div>
-        <div class="row" style="display: none">
-            <label for="smooth">Smooth</label>
-            <input id="smooth" title="s" type="checkbox"/>
-        </div>
-        <div class="row">
-            <button id="fullscreen" title="f">Fullscreen</button>
-        </div>
-        <div class="row">
-            <button id="reset" title="backspace">Reset view</button>
-        </div>
-        <div class="row">
-            <span id="value"></span>
-        </div>
-        <div class="row">
-            <footer>
-                <a href="https://github.com/bertbaron/mandelbrot" target="_blank">
-                    Sources
-                </a> |
-                <a href="https://github.com/bertbaron/mandelbrot/issues" target="_blank">
-                    Issue Tracker
-                </a>
-            </footer>
+        <div class="container container-sm">
+            <div class="mb-3 mt-3 row">
+                <label for="max-iterations" class="col-form-label col col-sm-6">Max iterations</label>
+                <div class="col col-sm-6">
+                    <input id="max-iterations" type="number" class="form-control form-control-sm" value="1000" step="100" title="+/-"/>
+                </div>
+            </div>
+            <div class="mb-3 g-1 row">
+                <div class="col col-sm-6 form-check form-switch">
+                    <input id="smooth" class="form-check-input" title="s" type="checkbox" role="switch"/>
+                    <label for="smooth" class="form-check-labels">Smooth</label>
+                </div>
+                <div class="col col-sm-6 form-check form-switch">
+                    <input id="fullres" class="form-check-input" title="s" type="checkbox" role="switch"/>
+                    <label for="fullres" class="form-check-labels">Full res.</label>
+                </div>
+            </div>
+            <div class="mb-3 g-1 row">
+                <div class="col col-sm-6">
+                    <button class="btn btn-success form-control form-control-sm" id="fullscreen" title="f">Fullscreen</button>
+                </div>
+                <div class="col col-sm-6">
+                    <button class="btn btn-success form-control form-control-sm" id="reset" title="backspace">Reset</button>
+                </div>
+            </div>
+            <div class="mb-0 row">
+                <div class="col col-lg-3">
+                    <label>Zoom</label>
+                </div>
+                <div class="col col-lg-3">
+                    <span id="zoomValue"></span>
+                </div>
+            </div>
+            <div class="mb-0 row">
+                <div class="col col-lg-3">
+                    <label>Size</label>
+                </div>
+                <div class="col col-lg-3">
+                    <span id="sizeValue"></span>
+                </div>
+            </div>
+            <div class="mb-0 row">
+                <div class="col col-lg-3">
+                    <label>Render time</label>
+                </div>
+                <div class="col col-lg-3">
+                    <span id="renderTimeValue"></span>
+                </div>
+            </div>
+            <div id="footer" class="row">
+                <footer>
+                    <a href="https://github.com/bertbaron/mandelbrot" target="_blank">
+                        Sources
+                    </a> |
+                    <a href="https://github.com/bertbaron/mandelbrot/issues" target="_blank">
+                        Issue Tracker
+                    </a>
+                </footer>
+            </div>
         </div>
     </div>
 </div>
 
 <script type="module" src="./index.js"></script>
+<!--<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"-->
+<!--        integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"-->
+<!--        crossorigin="anonymous"></script>-->
 </body>
 </html>
