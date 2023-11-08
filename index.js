@@ -1,4 +1,5 @@
 import * as fxp from './fxp.mjs'
+import * as palette from './palette.js'
 
 const SQUARE_SIZE = 30 // must be even!
 const DEFAULT_ITERATIONS = 1000
@@ -37,7 +38,7 @@ class MyWorker {
 }
 
 class Mandelbrot {
-    constructor(canvas, progress) {
+    constructor(canvas, progress, paletteComponent) {
         this.canvas = canvas
         this.progress = progress
         this.taskqueue = []
@@ -56,7 +57,11 @@ class Mandelbrot {
         this.smooth = true
 
         this.palette = []
-        this.initPallet()
+        this.paletteComponent = paletteComponent
+        this.initPallete(false)
+        this.paletteComponent.addListener(() => {
+            this.initPallete(true)
+        })
 
         // current rendering tasks
         this.jobToken = null // hmm, should be something like jobLevelToken
@@ -110,8 +115,16 @@ class Mandelbrot {
         }
     }
 
-    initPallet() {
-        this.palette = initPallet(this.max_iter)
+    initPallete(redraw) {
+        this.palette = palette.initPallet(this.paletteComponent.palette, this.paletteComponent.density, this.paletteComponent.rotate, this.paletteComponent.exp, this.max_iter)
+        renderPalette(this.palette)
+        if (redraw) {
+            const lastScreenNr = this.jobLevel < 1 ? this.offscreens.length : this.jobLevel-1
+            for (let screenNr = 0; screenNr <= lastScreenNr; screenNr++) {
+                this.offscreens[screenNr] && this.offscreens[screenNr].render(this.palette, this.max_iter, this.smooth)
+            }
+            updatePermalink()
+        }
     }
 
     _revokeJobToken() {
@@ -197,7 +210,7 @@ class Mandelbrot {
             if (this.stats.time !== 0) {
                 const time = this.stats.time
                 const hpPercent = this.stats.timeHighPrecision / time * 100
-                console.log(`Calculation time: ${this.stats.time.toFixed(0)}ms (${hpPercent.toFixed(0)}% in ${this.stats.highPrecisionCalculations} high precision points), ${this.stats.lowPrecisionMisses} low precision misses`)
+                // console.log(`Calculation time: ${this.stats.time.toFixed(0)}ms (${hpPercent.toFixed(0)}% in ${this.stats.highPrecisionCalculations} high precision points), ${this.stats.lowPrecisionMisses} low precision misses`)
             }
         }
     }
@@ -273,6 +286,15 @@ class Mandelbrot {
         let r = fxp.fromNumber(x, this.precision).subtract(w.divide(fxp.fromNumber(2, this.precision))).divide(scale)
         let i = fxp.fromNumber(y, this.precision).subtract(h.divide(fxp.fromNumber(2, this.precision))).divide(scale)
         return [r.add(center[0]), i.add(center[1])]
+    }
+}
+
+class PaletteConfig {
+    constructor(palette, density, rotate, exp) {
+        this.palette = palette
+        this.density = density
+        this.rotate = rotate
+        this.exp = exp
     }
 }
 
@@ -390,48 +412,6 @@ class ProgressMonitor {
     }
 }
 
-function initPallet(max_iter) {
-    const rgbaBuffer = new Uint8ClampedArray(max_iter * 4 + 20)
-    // 0 and 1 = transparent (skipped), 2 and 3 = black (in set)
-    // the first elements are doubled because we shift the palette by one for smoothing
-    rgbaBuffer[11] = 255
-    rgbaBuffer[15] = 255
-
-    const palettes = [
-        [[80, 81, 85], 610], // gold/blue
-    ]
-    const PAL = 0
-    const wavelengths = palettes[PAL][0]
-    const mirrorPosition = palettes[PAL][1]
-
-    for (let i = 0; i <= max_iter; i++) {
-        const adjusted = Math.pow(i, 0.9)
-        // mirror i every mirrorPosition positions
-        let idx = adjusted % (mirrorPosition * 2)
-        if (idx >= mirrorPosition) {
-            idx = mirrorPosition - (idx - mirrorPosition)
-        }
-
-        let r = Math.round(Math.sin(idx / wavelengths[0] * Math.PI) * 127) + 127
-        let g = Math.round(Math.sin(idx / wavelengths[1] * Math.PI) * 127) + 127
-        let b = Math.round(Math.sin(idx / wavelengths[2] * Math.PI) * 127) + 127
-
-        // convert above srgb to linear rgb
-        r /= 255
-        g /= 255
-        b /= 255
-        r = r <= 0.04045 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4)
-        g = g <= 0.04045 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4)
-        b = b <= 0.04045 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4)
-        rgbaBuffer[(i + 4) * 4] = Math.round(r * 255)
-        rgbaBuffer[(i + 4) * 4 + 1] = Math.round(g * 255)
-        rgbaBuffer[(i + 4) * 4 + 2] = Math.round(b * 255)
-        rgbaBuffer[(i + 4) * 4 + 3] = 255
-    }
-    renderPalette(rgbaBuffer)
-    return rgbaBuffer
-}
-
 function renderPalette(palette) {
     const ctx = paletteCanvasElement.getContext('2d')
     const width = paletteCanvasElement.offsetWidth
@@ -460,6 +440,7 @@ function initMenu() {
         menuToggle.classList.toggle("hidden")
     })
 }
+
 initMenu()
 
 const canvasElement = document.getElementById("mandelbrot-canvas")
@@ -468,7 +449,94 @@ const paletteCanvasElement = document.getElementById("palette-canvas")
 
 const tempCanvas = document.createElement('canvas');
 
-const fractal = new Mandelbrot(canvasElement, new ProgressMonitor(progressElement))
+class PaletteComponent {
+    constructor() {
+        this.listeners = []
+        this.palette = palette.getPalette('original')
+        this.density = 1
+        this.rotate = 0
+        // this.exp = 0.9
+    }
+
+    init() {
+        const paletteMenu = document.getElementById("palette-menu");
+
+        // Populate the dropdown dynamically
+        palette.PALETTES.forEach(p => {
+            const listItem = document.createElement("li");
+            const anchor = document.createElement("a");
+            anchor.classList.add("dropdown-item");
+            anchor.href = "#";
+            anchor.textContent = p.name;
+            anchor.dataset.paletteId = p.id
+            if (p.id === this.palette.id) {
+                anchor.classList.add("active")
+            }
+            anchor.addEventListener("click", () => {
+                this.setPalette(palette.getPalette(p.id))
+                this.notifyListeners()
+            });
+            listItem.appendChild(anchor);
+            paletteMenu.appendChild(listItem);
+        });
+
+        this.densitySlider = document.getElementById("palette-density");
+        this.densitySlider.addEventListener("input", () => {
+            this.setDensity(this.densitySlider.value, true)
+        });
+
+        this.rotateSlider = document.getElementById("palette-rotate");
+        this.rotateSlider.addEventListener("input", () => {
+            this.setRotate(this.rotateSlider.value, true)
+        });
+    }
+
+    setPalette(palette) {
+        this.palette = palette
+        const paletteMenu = document.getElementById("palette-menu");
+        for (let child of paletteMenu.children) {
+            const anchor = child.children[0]
+            if (anchor.dataset.paletteId === palette.id) {
+                anchor.classList.add("active")
+            } else {
+                anchor.classList.remove("active")
+            }
+        }
+    }
+
+    setDensity(density, skipControl) {
+        this.density = density
+        // document.getElementById("palette-density-label").innerText = "Density (" + density + ")"
+        skipControl || (this.densitySlider.value = this.density)
+        this.notifyListeners()
+    }
+
+    setRotate(rotate, skipControl) {
+        this.rotate = rotate
+        // document.getElementById("palette-rotate-label").innerText = "Rotate (" + rotate + ")"
+        skipControl || (this.rotateSlider.value = this.rotate)
+        this.notifyListeners()
+    }
+
+    // setExp(exp) {
+    //     this.exp = exp
+    //     this.notifyListeners()
+    // }
+
+    addListener(listener) {
+        this.listeners.push(listener)
+    }
+
+    notifyListeners() {
+        for (let listener of this.listeners) {
+            listener(this.palette)
+        }
+    }
+}
+
+const paletteComponent = new PaletteComponent();
+
+const fractal = new Mandelbrot(canvasElement, new ProgressMonitor(progressElement), paletteComponent)
 
 let redrawTimeout = null;
 
@@ -534,7 +602,7 @@ function setIterations(value) {
     if (newIter !== fractal.max_iter) {
         fractal.max_iter = newIter
         console.log(`max_iter: ${fractal.max_iter}`)
-        fractal.initPallet()
+        fractal.initPallete()
         iterationsElement.value = fractal.max_iter
         redraw()
         return true
@@ -763,6 +831,9 @@ fullResSwitch.addEventListener('change', (event) => {
 function reset() {
     fractal.setZoom(fxp.fromNumber(1))
     fractal.setCenter([fxp.fromNumber(-0.5), fxp.fromNumber(0)])
+    paletteComponent.setDensity(1)
+    paletteComponent.setRotate(0)
+    // paletteComponent.setExp(0.9)
     if (!setIterations(DEFAULT_ITERATIONS)) {
         redraw()
     }
@@ -803,15 +874,26 @@ function updatePermalink() {
         center: fractal.center,
         zoom: fractal.zoom,
         max_iter: fractal.max_iter,
-        smooth: fractal.smooth
+        smooth: fractal.smooth,
+        palette: {
+            id: paletteComponent.palette.id,
+            density: paletteComponent.density,
+            rotate: paletteComponent.rotate,
+            // exp: paletteComponent.exp
+        }
     }
     p.set('params', btoa(JSON.stringify(params)))
 
     window.history.replaceState({}, '', url)
 }
 
+function initUI() {
+    paletteComponent.init();
+}
+
 // on load, check if there is a permalink in the url
 function init() {
+    initUI()
     const url = new URL(window.location)
     const params = url.searchParams.get('params')
     if (params) {
@@ -820,12 +902,18 @@ function init() {
         fractal.setCenter(p.center.map(fxp.fromJSON))
         fractal.max_iter = p.max_iter
         fractal.smooth = p.smooth
+        if (p.palette) {
+            paletteComponent.setPalette(palette.getPalette(p.palette.id))
+            paletteComponent.setDensity(p.palette.density)
+            paletteComponent.setRotate(p.palette.rotate)
+            // paletteComponent.setExp(p.palette.exp)
+        }
     }
     // resizeTmpCanvas()
     onResize()
     iterationsElement.value = fractal.max_iter
     smoothElement.checked = fractal.smooth
-    fractal.initPallet()
+    fractal.initPallete()
     redraw()
 }
 
