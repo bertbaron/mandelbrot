@@ -63,6 +63,26 @@ body {
     padding: 10px;
 }
 
+.collapse-ruler button {
+    height: 1.5rem;
+    font-size: 75%;
+    color: #818a91;
+    padding: .25rem .5rem;
+    background-color: transparent;
+    border: 0;
+    border-radius: .25rem;
+    margin-top: 0.25rem;
+}
+
+.collapse-ruler button:hover {
+    color: #fff;
+    background-color: #027de7;
+}
+
+.collapse-ruler .col {
+    padding-right: 0;
+}
+
 kbd {
     display: inline-block;
     padding: 2px 5px;

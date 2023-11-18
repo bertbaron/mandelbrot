@@ -1,5 +1,6 @@
 import * as fxp from './fxp.mjs'
 import * as palette from './palette.js'
+import * as favorites from './favorites.js'
 
 const SQUARE_SIZE = 30 // must be even!
 const DEFAULT_ITERATIONS = 1000
@@ -119,7 +120,7 @@ class Mandelbrot {
         this.palette = palette.initPallet(this.paletteComponent.palette, this.paletteComponent.density, this.paletteComponent.rotate, this.paletteComponent.exp, this.max_iter)
         renderPalette(this.palette)
         if (redraw) {
-            const lastScreenNr = this.jobLevel < 1 ? this.offscreens.length : this.jobLevel-1
+            const lastScreenNr = this.jobLevel < 1 ? this.offscreens.length : this.jobLevel - 1
             for (let screenNr = 0; screenNr <= lastScreenNr; screenNr++) {
                 this.offscreens[screenNr] && this.offscreens[screenNr].render(this.palette, this.max_iter, this.smooth)
             }
@@ -502,6 +503,8 @@ class PaletteComponent {
                 anchor.classList.remove("active")
             }
         }
+        // set the palette name as the button text
+        document.getElementById("palette-dropdown").innerText = palette.name
     }
 
     setDensity(density, skipControl) {
@@ -688,9 +691,13 @@ function onResize(entries) {
         if (entry.devicePixelContentBoxSize) {
             const w = entry.devicePixelContentBoxSize[0].inlineSize
             const h = entry.devicePixelContentBoxSize[0].blockSize
-            devicePixelBoxSize = [w, h]
+            if (w !== canvasElement.offsetWidth || h !== canvasElement.offsetHeight) {
+                devicePixelBoxSize = [w, h]
+            }
         }
     }
+    fullResSwitch.disabled = devicePixelBoxSize == null
+    console.log(`Fullres switch enabled: ${fullResSwitch.enabled}`)
     resizeToCanvasSize()
 }
 
@@ -839,8 +846,18 @@ function reset() {
     }
 }
 
+function iFeelLucky() {
+    const favorite = favorites.getRandomFavorite()
+    initFromParams(favorite)
+    fractal.initPallete()
+    redraw()
+}
+
 resetElement.addEventListener('click', (event) => {
     reset();
+})
+document.getElementById("lucky-button").addEventListener('click', (event) => {
+    iFeelLucky();
 })
 appElement.addEventListener('keydown', (event) => {
     if (event.key === 'r') {
@@ -897,17 +914,7 @@ function init() {
     const url = new URL(window.location)
     const params = url.searchParams.get('params')
     if (params) {
-        const p = JSON.parse(atob(params))
-        fractal.setZoom(fxp.fromJSON(p.zoom))
-        fractal.setCenter(p.center.map(fxp.fromJSON))
-        fractal.max_iter = p.max_iter
-        fractal.smooth = p.smooth
-        if (p.palette) {
-            paletteComponent.setPalette(palette.getPalette(p.palette.id))
-            paletteComponent.setDensity(p.palette.density)
-            paletteComponent.setRotate(p.palette.rotate)
-            // paletteComponent.setExp(p.palette.exp)
-        }
+        initFromParams(params)
     }
     // resizeTmpCanvas()
     onResize()
@@ -915,6 +922,22 @@ function init() {
     smoothElement.checked = fractal.smooth
     fractal.initPallete()
     redraw()
+}
+
+function initFromParams(params) {
+    const p = JSON.parse(atob(params))
+    fractal.setZoom(fxp.fromJSON(p.zoom))
+    fractal.setCenter(p.center.map(fxp.fromJSON))
+    fractal.max_iter = p.max_iter
+    fractal.smooth = p.smooth
+    if (p.palette) {
+        paletteComponent.setPalette(palette.getPalette(p.palette.id))
+        paletteComponent.setDensity(p.palette.density)
+        paletteComponent.setRotate(p.palette.rotate)
+        // paletteComponent.setExp(p.palette.exp)
+    }
+    iterationsElement.value = fractal.max_iter
+    smoothElement.checked = fractal.smooth
 }
 
 window.onload = init

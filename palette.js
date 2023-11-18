@@ -15,7 +15,7 @@ export function initPallet(palette, density, rotate, exp, max_iter) {
     density = Math.pow(2, density/10)
     // const indexes = []
     for (let i = 0; i <= max_iter; i++) {
-        const v = i * density
+        const v = density * i // Math.pow(i*2, 0.9)
 
         const [r, g, b] = palette.getColor(v, rotate)
         rgbaBuffer[(i + 4) * 4] = r
