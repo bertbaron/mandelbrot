@@ -12,8 +12,7 @@ export function initPallet(palette, density, rotate, exp, max_iter) {
     rgbaBuffer[15] = 255
 
     // Scale density exponentially
-    density = Math.pow(2, density/10)
-    // const indexes = []
+    density = Math.pow(2, density / 10)
     for (let i = 0; i <= max_iter; i++) {
         const v = density * i // Math.pow(i*2, 0.9)
 
@@ -58,6 +57,32 @@ class OriginalPalette {
     }
 }
 
+class GrayScalePalette {
+    constructor(id, name, min, max) {
+        this.id = id
+        this.name = name
+        this.min = min
+        this.max = max
+    }
+
+    getColor(v, rotate) {
+        const idx = v * 1.6 + rotate / 180
+        const f = Math.sin(idx / 80 * Math.PI - Math.PI / 3) * 127 + 128
+        return [f, f, f]
+    }
+}
+
+class SingleColorPalette {
+    constructor(id, name, color) {
+        this.id = id
+        this.name = name
+        this.color = color
+    }
+
+    getColor(v, rotate) {
+        return this.color
+    }
+}
 
 class IndexedPalette {
     constructor(id, name, colors, mirror, reverse) {
@@ -72,47 +97,30 @@ class IndexedPalette {
     getColor(v, rotate) {
         const palette = this.colors
         const scaled = v * palette.length / 100 + rotate / 360 * palette.length
-        // const scaled = v * palette.length / 100
-        const f = scaled - Math.floor(scaled)
+        return this.getInterpolationFunctions().map(fn => Math.round(fn(scaled)))
+    }
 
-        let idx = Math.floor(scaled)
-        if (idx < 0) idx += palette.length
-
-        const c1 = palette[idx % palette.length]
-        const c2 = palette[(idx + 1) % palette.length]
-
-        return [
-            Math.round(c1[0] * (1 - f) + c2[0] * f),
-            Math.round(c1[1] * (1 - f) + c2[1] * f),
-            Math.round(c1[2] * (1 - f) + c2[2] * f)
-        ]
+    getInterpolationFunctions() {
+        if (!this.interpolationFunctions) {
+            this.interpolationFunctions = [0, 1, 2].map(i => monotoneCubicInterpolationFN(this.colors.map(c => c[i])))
+        }
+        return this.interpolationFunctions
     }
 }
 
-const ORIGINAL = new OriginalPalette();
-
-const DUSK_DAWN = new IndexedPalette("dusk-to-dawn", "Dusk to Dawn", [
-    [66, 30, 15],
-    [25, 7, 26],
-    [9, 1, 47],
-    [4, 4, 73],
+// Similar to that of Ultra Fractal, although these colors are equaly spaced
+const MANDELBROT = new IndexedPalette("mandelbrot", "Mandelbrot", [
     [0, 7, 100],
-    [12, 44, 138],
-    [24, 82, 177],
-    [57, 125, 209],
-    [134, 181, 229],
-    [211, 236, 248],
-    [241, 233, 191],
-    [248, 201, 95],
+    [32, 107, 203],
+    [237, 255, 255],
     [255, 170, 0],
-    [204, 128, 0],
-    [153, 87, 0],
-    [106, 52, 3]
+    [0, 2, 0],
 ], false)
+
 const LAVA = new IndexedPalette("lava", "Lava", [
     [0, 0, 0],
     [10, 0, 0],
-    [20, 0, 0],
+    [20, 0, 0], // [20, 0, 0],
     [40, 0, 0],
     [80, 0, 0],
     [160, 10, 0],
@@ -122,20 +130,15 @@ const LAVA = new IndexedPalette("lava", "Lava", [
     [255, 220, 10],
     [255, 255, 80],
     [255, 255, 160],
-    [255, 255, 255]
+    [255, 255, 255],
 ], true)
 const FALL = new IndexedPalette("fall", "Fall", [
-    [102, 34, 0],
-    [204, 68, 0],
-    [204, 102, 0],
-    [255, 102, 0],
-    [255, 153, 0],
-    [255, 204, 0],
-    [255, 255, 0],
-    [255, 204, 102],
-    [255, 255, 153],
-    [255, 255, 204],
-    [204, 102, 0],
+    [25, 25, 25],
+    [128, 0, 0],
+    [255, 69, 0],
+    [255, 140, 0],
+    [255, 215, 0],
+    [255, 239, 184],
 ], false)
 const OCEAN = new IndexedPalette("ocean", "Ocean", [
     [0, 0, 51],
@@ -194,41 +197,93 @@ const JEWELLERY = new IndexedPalette("jewellery", "Jewellery", [
     [51, 153, 255],
     [0, 0, 153]
 ], false)
-const DESERT = new IndexedPalette("desert", "Desert", [
-    [255, 204, 153],
-    [204, 119, 34],
-    [153, 102, 51],
-    [204, 153, 102],
-    [204, 153, 51],
-    [255, 255, 102],
-    [255, 204, 102],
-    [153, 102, 102],
-    [102, 102, 51],
-    [51, 51, 51],
-    [0, 0, 0]
-], false, true)
-const BLUE_AND_BLACK = new IndexedPalette("blue_and_black", "Blue & Black", [
-    [0, 0, 0],     // Black
-    [0, 0, 51],    // Midnight Blue
-    [0, 0, 102],   // Dark Blue
-    [0, 0, 153],   // Navy Blue
-    [0, 51, 102],  // Deep Teal
-    [0, 51, 153],  // Deep Blue
-    [0, 51, 204],  // Cobalt Blue
-    [0, 102, 204], // Royal Blue
-    [51, 102, 153], // Slate Blue
-    [51, 51, 51]    // Charcoal
-], false, false)
 
 export const PALETTES = [
-    ORIGINAL,
-    DUSK_DAWN,
+    new OriginalPalette(),
+    MANDELBROT,
     LAVA,
-    // FALL,
+    FALL,
     OCEAN,
     SKY_WATER,
     POP,
     JEWELLERY,
-    // DESERT,
-    // BLUE_AND_BLACK
+    new GrayScalePalette("gray_scale", "Gray Scale", 0, 255),
+    new SingleColorPalette("black_white", "Pure B/W", [255, 255, 255]),
 ]
+
+function linearInterpolationFN(values) {
+    const N = values.length
+    return function (x) {
+        const t = x - Math.floor(x)
+        let k = Math.floor(x)
+        if (k < 0) k += N
+
+        const yk0 = values[k % N]
+        const yk1 = values[(k + 1) % N]
+        return yk0 * (1 - t) + yk1 * t
+    }
+}
+
+// https://en.wikipedia.org/wiki/Monotone_cubic_interpolation
+function monotoneCubicInterpolationFN(values) {
+    const N = values.length;
+    const delta = []
+    for (let k = 0; k < N; k++) {
+        delta.push((values[(k + 1) % N] - values[k]))
+    }
+
+    const m = []
+    for (let k = 1; k <= N; k++) {
+        const dk = delta[k % N]
+        const dk1 = delta[(k + 1) % N]
+        m[(k + 1) % N] = dk * dk1 <= 0 ? 0 : (dk + dk1) / 2
+        // m[(k + 1) % N] = (dk + dk1) / 2
+    }
+
+    for (let k = 0; k < N; k++) {
+        if (delta[k] !== 0) {
+            const alpha = m[k] / delta[k]
+            const beta = m[(k + 1) % N] / delta[k]
+            if (alpha < 0) {
+                m[k] = 0
+            }
+            if (beta < 0) {
+                m[(k + 1) % N] = 0
+            }
+
+            const sqRadius = alpha * alpha + beta * beta
+            if (sqRadius > 9) {
+                const tau = 3 / Math.sqrt(sqRadius)
+                m[k] = tau * alpha * delta[k]
+                m[(k + 1) % N] = tau * beta * delta[k]
+            }
+        }
+    }
+
+    return function (x) {
+        const t = x - Math.floor(x)
+        let k = Math.floor(x)
+        if (k < 0) k += N
+
+        const yk0 = values[k % N]
+        const yk1 = values[(k + 1) % N]
+
+        return yk0 * h00(t) + m[k % N] * h10(t) + yk1 * h01(t) + m[(k + 1) % N] * h11(t)
+    }
+}
+
+function h00(t) {
+    return (1 + 2 * t) * Math.pow(1 - t, 2)
+}
+
+function h10(t) {
+    return t * Math.pow(1 - t, 2)
+}
+
+function h01(t) {
+    return t * t * (3 - 2 * t)
+}
+
+function h11(t) {
+    return t * t * (t - 1)
+}

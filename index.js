@@ -697,7 +697,6 @@ function onResize(entries) {
         }
     }
     fullResSwitch.disabled = devicePixelBoxSize == null
-    console.log(`Fullres switch enabled: ${fullResSwitch.enabled}`)
     resizeToCanvasSize()
 }
 
