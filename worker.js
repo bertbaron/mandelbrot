@@ -334,8 +334,8 @@ export class JavascriptPerturbationImpl {
             if (shouldStop()) return
         }
 
-        let refIndex = 0
-        let refDir = 1
+        // We queue reference points in LRU order, the head pointing to the least recently successfully used reference point
+        let head = this.referencePoints.length - 1
         for (let y = 0; y < h; y++) {
             let re = rmin.bigInt
             const skipLeft = skipTopLeft && y % 2 === 0
@@ -348,13 +348,9 @@ export class JavascriptPerturbationImpl {
                     const offset = y * w + x
                     const start = performance.now()
 
-                    // loop over reference points and calculate perturbation until we find a valid result
-                    let attempts = 0
+                    let refIndex = head
                     for (let ignored of this.referencePoints) {
                         let referencePoint = this.referencePoints[refIndex]
-                        if (!referencePoint[0]) {
-                            console.log("WTF")
-                        }
                         const rr = referencePoint[0][0]
                         const ri = referencePoint[0][1]
                         const zs = referencePoint[3]
@@ -366,15 +362,20 @@ export class JavascriptPerturbationImpl {
                             values[offset] = smoothen(smooth, offset, iter, zq)
                             found = true
                             numberOfLowPrecisionPoints++
-                            if (attempts === 1) {
-                                refDir *= -1 // prefer toggeling between succeeding reference points
+                            if (refIndex < head) {
+                                head--
+                                this.referencePoints[refIndex] = this.referencePoints[head]
+                                this.referencePoints[head] = referencePoint
+                            } else if (refIndex > head) {
+                                for (let i = refIndex; i > head; i--) {
+                                    this.referencePoints[i] = this.referencePoints[i - 1]
+                                }
+                                this.referencePoints[head] = referencePoint
                             }
                             break
-
                         }
                         numberOfLowPrecisionMisses++
-                        attempts++
-                        refIndex = (refIndex + refDir + this.referencePoints.length) % this.referencePoints.length
+                        refIndex = (refIndex + 1) % this.referencePoints.length
                     }
 
                     const end = performance.now()
@@ -382,8 +383,7 @@ export class JavascriptPerturbationImpl {
                     if (!found) {
                         const newRef = this.calculate_reference(rmin, imin, dr, di, scale, scaleValue, scaleFactor, x, y, bigBailout)
                         values[offset] = smoothen(smooth, offset, newRef[1], Number(newRef[2]) / scaleFactor)
-                        this.referencePoints.push(newRef)
-                        refIndex = this.referencePoints.length - 1
+                        this.referencePoints.unshift(newRef)
                         if (shouldStop()) return
                     }
                 }
@@ -393,8 +393,6 @@ export class JavascriptPerturbationImpl {
             if (shouldStop()) return
         }
     }
-
-    // http://localhost:63342/wip/index.html?_ijt=9a2uiik3ascdj3hr7r9hea6ien&_ij_reload=RELOAD_ON_SAVE&params=eyJjZW50ZXIiOlt7ImJpZ0ludCI6Ii00MjI1MjY2NzUwNjQzNzg1MTg0Iiwic2NhbGUiOjYxfSx7ImJpZ0ludCI6Ii02MzgxMTE3MTY4NzcyNiIsInNjYWxlIjo2MX1dLCJ6b29tIjp7ImJpZ0ludCI6IjM4ODU5MzU4Mjc2NjM5MTc2NTcxMTM5MzM1NzQ2NzYwMSIsInNjYWxlIjo2MX0sIm1heF9pdGVyIjoxMDAwMCwic21vb3RoIjp0cnVlfQ%3D%3D
 
     mandlebrot_perturbation(dcr, dci, max_iter, bailout, zs) {
         // ε₀ = δ
