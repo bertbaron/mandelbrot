@@ -66,7 +66,7 @@ class GrayScalePalette {
     }
 
     getColor(v, rotate) {
-        const idx = v * 1.6 + rotate / 180
+        const idx = v * 1.6 + rotate / 180 * 80
         const f = Math.sin(idx / 80 * Math.PI - Math.PI / 3) * 127 + 128
         return [f, f, f]
     }
