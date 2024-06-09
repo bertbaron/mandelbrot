@@ -54,6 +54,11 @@ export class FxP {
         return this.bigInt <= other.bigInt
     }
 
+    flooredLog2() {
+        const n = this.bigInt >> this.bigScale
+        return n.toString(2).length - 1;
+    }
+
     withScale(scale) {
         const diff = scale - this.scale
         if (diff === 0) return this
@@ -66,6 +71,10 @@ export class FxP {
 
     toNumber() {
         return Number(this.bigInt) / Math.pow(2, this.scale)
+    }
+
+    bigIntValue() {
+        return this.bigInt >> this.bigScale
     }
 
     toString() {

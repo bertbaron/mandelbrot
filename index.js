@@ -94,7 +94,7 @@ class Mandelbrot {
     }
 
     _updatePrecision() {
-        this.requiredPrecision = Math.ceil(Math.log2(this.zoom.toNumber() * this.width)) + 4
+        this.requiredPrecision = this.zoom.multiply(fxp.fromNumber(this.width).withScale(this.zoom.scale)).flooredLog2() + 5
         this.precision = Math.max(58, this.requiredPrecision)
         this.zoom = this.zoom.withScale(this.precision)
         this.center[0] = this.center[0].withScale(this.precision)
@@ -561,7 +561,11 @@ async function redraw(resetCaches, cooldown) {
 }
 
 function showZoomFactor() {
-    document.getElementById('zoomValue').innerText = `${fractal.zoom.toNumber().toExponential(2)}`
+    const zoom = fractal.zoom.bigIntValue()
+    const zoomStr = zoom.toString()
+    const zoomExp = zoomStr.length - 1
+    const zoomMantissa = zoomStr[0] + '.' + zoomStr.substring(1, 3)
+    document.getElementById('zoomValue').innerText = `${zoomMantissa}e${zoomExp}`
 }
 
 let lastX = canvasElement.width / 2
