@@ -7,13 +7,13 @@
 // const FP_BASE = Math.pow(2,FP_BITS)
 // const FP_MASK = FP_BASE - 1
 
-const ASSERTIONS = true
+const ASSERTIONS = false
 
 export class FxP {
     constructor(bigInt, scale, bigScale) {
         if (ASSERTIONS && typeof bigInt !== 'bigint') throw new Error(`intValue must be a bigint but is a ${typeof bigInt}`)
         if (ASSERTIONS && typeof scale !== 'number') throw new Error(`scale must be a number but is a ${typeof bigint}`)
-        if (ASSERTIONS && bigScale &&  typeof bigScale !== 'bigint') throw new Error(`bigScale must be a bigint but is a ${typeof bigScale}`)
+        if (ASSERTIONS && bigScale && typeof bigScale !== 'bigint') throw new Error(`bigScale must be a bigint but is a ${typeof bigScale}`)
         this.bigInt = bigInt
         this.scale = scale
         this.bigScale = bigScale || BigInt(scale)
@@ -90,11 +90,26 @@ export class FxP {
 }
 
 export function fromNumber(value, scale) {
+    if (Number.isInteger(value)) {
+        return fromIntNumber(value, scale)
+    }
+
+    // We assume relatively 'normal' numbers that we can scale up slightly in number space and further in bigint space
+    if (ASSERTIONS) {
+        const exp = Math.floor(Math.log2(Math.abs(value)))
+        if (exp < -50 || exp > 50) throw new Error(`fromNumber(${value}, ${scale}) out of supported range`)
+    }
+
     scale = scale || 60
     const bigScale = BigInt(scale)
-    let scaledNumber = Math.round(value * Math.pow(2, scale));
-    const scaledValue = BigInt(scaledNumber)
+    const scaledValue = BigInt(Math.round(value * Math.pow(2, 50))) << BigInt(scale - 50)
     return new FxP(scaledValue, scale, bigScale)
+}
+
+export function fromIntNumber(value, scale) {
+    scale = scale || 60
+    const bigScale = BigInt(scale)
+    return new FxP(BigInt(value) << bigScale, scale, bigScale)
 }
 
 export function fromJSON(json) {

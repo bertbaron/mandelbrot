@@ -280,6 +280,9 @@ class Mandelbrot {
 
     // x and y are canvas integer, returns a fixed-point complex number
     canvas2complex(x, y) {
+        // Make sure x and y are integers because FxP.fromNumber(value, scale) will fail currently when the scale becomes very large
+        x = Math.round(x)
+        y = Math.round(y)
         const w = fxp.fromNumber(this.width, this.precision)
         const h = fxp.fromNumber(this.height, this.precision)
         let scale = this.zoom.multiply(w).divide(fxp.fromNumber(4, this.precision))
