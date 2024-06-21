@@ -1,7 +1,17 @@
 import * as fxp from "./fxp.mjs";
-import {WorkerContext, smoothen} from "./workerContext.mjs";
+import {smoothen, WorkerContext} from "./workerContext.mjs";
 
-export class MandelbrotPerturbation {
+/**
+ * Similar to MandelbrotPerturbation class. That one uses floating point numbers for fast calculations. Those numbers
+ * are typically very small, so we can't use them for deep zoom levels (above approx. 1e300) due to the limitations of
+ * the number type.
+ * In this class we use the FlP class that can handle much smaller numbers. Though not as fast as floating point it is
+ * still much faster than performing all calculations in BigInt.
+ *
+ * We should try to share code with MandelbrotPerturbation of course, but need to test if this doesn't affect performance
+ * as Javascript/jit optimization might be affected by the different types.
+ */
+export class MandelbrotPerturbationExtFloat {
     /**
      * @param {WorkerContext} ctx
      */
@@ -12,7 +22,7 @@ export class MandelbrotPerturbation {
         this.referencePoints = []
     }
 
-    process(task) {
+    process(task){
         this.max_iter = task.maxIter
         const w = task.w
         const h = task.h
@@ -67,18 +77,18 @@ export class MandelbrotPerturbation {
     }
 
     calculate(values, smooth, w, h, skipTopLeft, task) {
+        const debugStr = task.taskNumber === 0 ? `${task.jobId}-${task.taskNumber}` : ``
         const stats = this.ctx.stats
         const scale = task.precision
-        const scaleFactor = Math.pow(2, Number(scale))
         const bigScale = BigInt(scale)
         const rmin = (task.frameTopLeft)[0]
         const rmax = (task.frameBottomRight)[0]
         const imin = (task.frameTopLeft)[1]
         const imax = (task.frameBottomRight)[1]
 
-        // Size in the complex plane
-        const cWidth = Number(rmax.subtract(rmin).bigInt) / scaleFactor
-        const cHeight = Number(imax.subtract(imin).bigInt) / scaleFactor
+        // Size in the complex plane with implicit exponent 2^-scale
+        const cWidth = Number(rmax.subtract(rmin).bigInt)
+        const cHeight = Number(imax.subtract(imin).bigInt)
         const refr = rmin.bigInt
         const refi = imin.bigInt
 
@@ -90,10 +100,11 @@ export class MandelbrotPerturbation {
             const y = Math.trunc(h / 2)
             const dr = (task.xOffset + x) / task.frameWidth * cWidth
             const di = (task.yOffset + y) / task.frameHeight * cHeight
-            this.referencePoints.push(this.calculate_reference(refr, refi, dr, di, bigScale, scaleFactor, bigBailout))
+            this.referencePoints.push(this.calculate_reference(-scale, refr, refi, dr, di, bigScale, scale, bigBailout))
             if (this.ctx.shouldStop()) return
         }
 
+        const debugFrame = [[300, 100], [350, 150]]
         // We queue reference points in LRU order, the head pointing to the least recently successfully used reference point
         let head = this.referencePoints.length - 1
         for (let y = 0; y < h; y++) {
@@ -117,7 +128,7 @@ export class MandelbrotPerturbation {
                         const refDi = referencePoint[0][1]
                         const zs = referencePoint[3]
 
-                        const [iter, zq] = this.mandlebrot_perturbation(dr - refDr, di - refDi, this.max_iter, bailout, zs)
+                        const [iter, zq] = this.mandlebrot_perturbation(-scale, dr - refDr, di - refDi, this.max_iter, bailout, zs)
                         if (iter >= 0) {
                             values[offset] = smoothen(smooth, offset, iter, zq)
                             found = true
@@ -141,8 +152,8 @@ export class MandelbrotPerturbation {
                     const end = performance.now()
                     this.ctx.stats.timeSpendInLowPrecision += end - start
                     if (!found) {
-                        const newRef = this.calculate_reference(refr, refi, dr, di, bigScale, scaleFactor, bigBailout)
-                        values[offset] = smoothen(smooth, offset, newRef[1], Number(newRef[2]) / scaleFactor)
+                        const newRef = this.calculate_reference(-scale, refr, refi, dr, di, bigScale, scale, bigBailout)
+                        values[offset] = smoothen(smooth, offset, newRef[1], Number(newRef[2] >> (bigScale - 60n)) * 2 ** -60)
                         this.referencePoints.unshift(newRef)
                         if (this.ctx.shouldStop()) return
                     }
@@ -153,17 +164,20 @@ export class MandelbrotPerturbation {
     }
 
     /**
+     * @param {number} dExp exp of dcr and dci
      * @param {number} dcr
      * @param {number} dci
      * @param {number} max_iter
      * @param {number} bailout
-     * @param {[number, number, number][]} zs
+     * @param {[number, number, number, number, number, number, number][]} zs (zr, zi, zq, zExp, zExpFactor, zEzpDeltaFactor, dExpZEzpDeltaFactor)[]
      * @returns {(number|number)[]|number[]}
      */
-    mandlebrot_perturbation(dcr, dci, max_iter, bailout, zs) {
+    mandlebrot_perturbation(dExp, dcr, dci, max_iter, bailout, zs) {
+
         // ε₀ = δ
         let ezr = dcr
         let ezi = dci
+        let eExp = dExp
 
         let iter = -1
         let zzq = 0
@@ -172,59 +186,74 @@ export class MandelbrotPerturbation {
                 return [2, 0]
             }
             if (iter >= zs.length) {
-                // TODO make sure we don't get here by pre-caclulating enough (how do we know how many?) or extending the sequence from here
-                // console.log('Not enough reference points')
                 return [-1, zzq]
             }
 
             // Zₙ
             const _zsvalues = zs[iter]
+            const newEExp = _zsvalues[3]
+            const eExpFactor = _zsvalues[4]  // 2 ** eExp
+            const eExpDeltaFactor = _zsvalues[5]  // 2 ** (eExp - newEExp);
+            ezr *= eExpDeltaFactor
+            ezi *= eExpDeltaFactor
+            dcr *= eExpDeltaFactor
+            dci *= eExpDeltaFactor
+            eExp = newEExp
+
             const zr = _zsvalues[0]
             const zi = _zsvalues[1]
             const zqErrorBound = _zsvalues[2]
 
-            // console.log(`n: ${iter}, Zₙ: ${asString([zr, zi])}, εₙ: ${asString([ezr, ezi])}, |Zₙ|²: ${asString(zqErrorBound)}`)
-
             // Z'ₙ = Zₙ + εₙ
-            const zzr = zr + ezr
-            const zzi = zi + ezi
+            const zzr = zr + ezr * eExpFactor
+            const zzi = zi + ezi * eExpFactor
             zzq = zzr * zzr + zzi * zzi
             if (zzq < zqErrorBound) {
                 return [-1, 0]
             }
 
             // εₙ₊₁ = 2·zₙ·εₙ + εₙ² + δ = (2·zₙ + εₙ)·εₙ + δ
-            let zr_ezr_2 = 2 * zr + ezr;
-            let zi_ezi_2 = 2 * zi + ezi;
-            const _ezr = zr_ezr_2 * ezr - zi_ezi_2 * ezi
-            const _ezi = zr_ezr_2 * ezi + zi_ezi_2 * ezr
+            const zr_ezr_2 = 2 * zr + ezr * eExpFactor
+            const zi_ezi_2 = 2 * zi + ezi * eExpFactor
+            const _ezr = (zr_ezr_2 * ezr - zi_ezi_2 * ezi)
+            const _ezi = (zr_ezr_2 * ezi + zi_ezi_2 * ezr)
+
             ezr = _ezr + dcr
             ezi = _ezi + dci
-            // console.log(`εₙ₊₁r: ${asString(ezr)} = ${asString(_ezr)} + ${asString(dcr)}`)
         }
         return [iter + 4, zzq]
     }
 
     /**
-     * @param {BigInt} refr
-     * @param {BigInt} refi
-     * @param {number} dr
-     * @param {number} di
-     * @param {BigInt} bigScale
-     * @param {number} scaleFactor
+     * @param {number} dExp the initial exponent
+     * @param {BigInt} refr fixed point reference point real part
+     * @param {BigInt} refi fixed point reference point imaginary part
+     * @param {number} dr the delta relative to the reference point real part as floating point with implicit exponent 2^-scale
+     * @param {number} di the delta relative to the reference point imaginary part as floating point with implicit exponent 2^-scale
+     * @param {BigInt} scale
+     * @param {number} scaleValue
      * @param {BigInt} bailout
-     * @returns {[[BigInt, BigInt], number, BigInt, [number, number, number][]]} [rr, ri], iter, zq, sequence where sequence is a list of [zr, zi, errorbound] tuples
+     * @returns {[[fxp.FxP, fxp.FxP], number, BigInt, [number, number, number, number, number, number, number][]]} ((rr, ri), iter, zq, (zr, zi, zqErrorBound, zExp, zExpFactor, zEzpDeltaFactor, dExpZEzpDeltaFactor)[])
      */
-    calculate_reference(refr, refi, dr, di, bigScale, scaleFactor, bailout) {
+    calculate_reference(dExp, refr, refi, dr, di, scale, scaleValue, bailout) {
         const start = performance.now()
-        const rr = refr + BigInt(Math.round(dr * scaleFactor))
-        const ri = refi + BigInt(Math.round(di * scaleFactor))
-        const [iter, zq, seq] = this.mandelbrot_high_precision(rr, ri, this.max_iter, bailout, bigScale)
-        const zs = seq.map(([zr, zi]) => {
-            // TODO Zq is already calculated. And dividing by factor of 2 may be faster
-            let z_real = Number(zr) / scaleFactor;
-            let z_imag = Number(zi) / scaleFactor;
-            return [z_real, z_imag, (z_real * z_real + z_imag * z_imag) * 0.000001];
+        const rr = refr + BigInt(Math.round(dr))
+        const ri = refi + BigInt(Math.round(di))
+        const [iter, zq, seq] = this.mandelbrot_high_precision(rr, ri, this.max_iter, bailout, scale)
+        let lastExp = dExp
+
+        const iterations = seq.length
+        const zs = seq.map(([zr, zi], idx) => {
+            const eExp = Math.round(dExp - (idx / iterations) * dExp)
+            const eExpDeltaFactor = 2 ** (lastExp-eExp)
+            const eExpFactor = 2 ** eExp
+            lastExp = eExp
+
+            const z_real = new fxp.FxP(zr, scaleValue, scale).toNumber()
+            const z_imag = new fxp.FxP(zi, scaleValue, scale).toNumber()
+            const zq = ( z_real * z_real + z_imag * z_imag) * 0.000001
+
+            return [z_real, z_imag, zq, eExp, eExpFactor, eExpDeltaFactor]
         })
         const end = performance.now()
         this.ctx.stats.timeSpendInHighPrecision += end - start
@@ -262,13 +291,4 @@ export class MandelbrotPerturbation {
         }
         return [iter + 4, zq, seq]
     }
-}
-
-function asString(nr) {
-    // If it is a list, format it as tuple recursively
-    if (Array.isArray(nr)) {
-        return `(${nr.map(asString).join(', ')})`
-    }
-    // Format the number in scientific notation with two decimal places
-    return (nr < 0 ? '' : ' ') + nr.toExponential(2)
 }

@@ -10,7 +10,12 @@
 const ASSERTIONS = false
 
 export class FxP {
-    constructor(bigInt, scale, bigScale) {
+    /**
+     * @param {bigint} bigInt
+     * @param {number} scale
+     * @param {bigint} bigScale optional bigScale, must be the same as scale!
+     */
+    constructor(bigInt, scale, bigScale = 0n) {
         if (ASSERTIONS && typeof bigInt !== 'bigint') throw new Error(`intValue must be a bigint but is a ${typeof bigInt}`)
         if (ASSERTIONS && typeof scale !== 'number') throw new Error(`scale must be a number but is a ${typeof bigint}`)
         if (ASSERTIONS && bigScale && typeof bigScale !== 'bigint') throw new Error(`bigScale must be a bigint but is a ${typeof bigScale}`)
@@ -54,9 +59,16 @@ export class FxP {
         return this.bigInt <= other.bigInt
     }
 
-    flooredLog2() {
+    /**
+     * Returns approximate number of bits of the integer value. Works for very large numbers, not for very small
+     *
+     * @param {BigInt} value
+     * @returns {number}
+     */
+    bits() {
         const n = this.bigInt >> this.bigScale
-        return n.toString(2).length - 1;
+        return n.toString(2).length - (n < 0 ? 2 : 1);
+        // return bits(this.bigInt >> this.bigScale)
     }
 
     withScale(scale) {
@@ -69,8 +81,19 @@ export class FxP {
         }
     }
 
+    /**
+     * Converts the fixed-point number to a number. Not that the value may be out of the range of a number.
+     * @returns {number}
+     */
     toNumber() {
-        return Number(this.bigInt) / Math.pow(2, this.scale)
+        let exp = -this.scale
+        const size = bits(this.bigInt)
+        if (size > 53) {
+            const preScale = size - 53
+            const n = Number(this.bigInt >> BigInt(preScale))
+            return n * 2 ** (exp + preScale)
+        }
+        return Number(this.bigInt) * 2 ** exp
     }
 
     bigIntValue() {
@@ -89,27 +112,62 @@ export class FxP {
     }
 }
 
-export function fromNumber(value, scale) {
+export function fromNumber(value, scale = 60) {
     if (Number.isInteger(value)) {
         return fromIntNumber(value, scale)
     }
 
-    // We assume relatively 'normal' numbers that we can scale up slightly in number space and further in bigint space
-    if (ASSERTIONS) {
-        const exp = Math.floor(Math.log2(Math.abs(value)))
-        if (exp < -50 || exp > 50) throw new Error(`fromNumber(${value}, ${scale}) out of supported range`)
+    let prescale = 0
+    const exp = exponent(value)
+    if (exp < 53) {
+        prescale = Math.min(1023,  Math.min(scale, 53 - exp))
     }
-
-    scale = scale || 60
+    let sValue = Math.round(value * 2 ** prescale);
     const bigScale = BigInt(scale)
-    const scaledValue = BigInt(Math.round(value * Math.pow(2, 50))) << BigInt(scale - 50)
+    const scaledValue = BigInt(sValue) << BigInt(scale - prescale)
     return new FxP(scaledValue, scale, bigScale)
 }
 
-export function fromIntNumber(value, scale) {
-    scale = scale || 60
+export function fromIntNumber(value, scale = 60) {
     const bigScale = BigInt(scale)
     return new FxP(BigInt(value) << bigScale, scale, bigScale)
+}
+
+/**
+ * Calculates the 2-base exponent of the given number. Deals with 0 and negative numbers.
+ * @param {number} number
+ * @returns {number}
+ */
+function exponent(number) {
+    return (number === 0) ? 0 : Math.floor(Math.log2(Math.abs(number)))
+}
+
+/**
+ * Returns approximate number of bits of the given value.
+ * @param {BigInt} value
+ * @returns {number}
+ */
+function bits(value) {
+    return value > 0 ? ilog2(value) : ilog2(-value)
+}
+
+/**
+ * https://stackoverflow.com/questions/55355184/optimized-integer-logarithm-base2-for-bigint
+ * @param {BigInt} value
+ * @returns {number}
+ */
+function ilog2(value) {
+    let result = 0n, i, v
+    for (i = 1n; value >> (1n << i); i <<= 1n) {
+    }
+    while (value > 1n) {
+        v = 1n << --i
+        if (value >> v) {
+            result += v
+            value >>= v
+        }
+    }
+    return Number(result)
 }
 
 export function fromJSON(json) {

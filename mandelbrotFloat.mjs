@@ -12,26 +12,32 @@ export class MandelbrotFloat {
         this.ctx = ctx
     }
 
-    onTask(task) {
+    process(task) {
         this.max_iter = task.maxIter
         const w = task.w
         const h = task.h
-        const topleft = task.topleft
-        const bottomright = task.bottomright
 
-        const topLeftFloat = topleft.map(fixed => fixed.toNumber())
-        const bottomRightFloat = bottomright.map(fixed => fixed.toNumber())
+        const frameTopLeftFloat = task.frameTopLeft.map(fixed => fixed.toNumber())
+        const frameBottomRightFloat = task.frameBottomRight.map(fixed => fixed.toNumber())
+        const topLeftFloat = [
+            frameTopLeftFloat[0] + task.xOffset * (frameBottomRightFloat[0] - frameTopLeftFloat[0]) / task.frameWidth,
+            frameTopLeftFloat[1] + task.yOffset * (frameBottomRightFloat[1] - frameTopLeftFloat[1]) / task.frameHeight
+        ]
+        const bottomRightFloat = [
+            frameTopLeftFloat[0] + (task.xOffset + w) * (frameBottomRightFloat[0] - frameTopLeftFloat[0]) / task.frameWidth,
+            frameTopLeftFloat[1] + (task.yOffset + h) * (frameBottomRightFloat[1] - frameTopLeftFloat[1]) / task.frameHeight
+        ]
 
         const values = new Int32Array(w * h)
         const smooth = task.smooth ? new Uint8ClampedArray(w * h) : null
         this.calculate(values, smooth, w, h, topLeftFloat, bottomRightFloat, task.skipTopLeft, task.jobToken)
 
-        postMessage({
+        return {
             type: 'answer',
             task: task,
             values: values,
             smooth: smooth
-        })
+        }
     }
 
     /**

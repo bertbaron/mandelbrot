@@ -2,7 +2,7 @@ import * as fxp from './fxp.mjs'
 import * as palette from './palette.js'
 import * as favorites from './favorites.js'
 
-const SQUARE_SIZE = 30 // must be even!
+const SQUARE_SIZE = 30 // must be even or -1 for full-frame tasks
 const DEFAULT_ITERATIONS = 1000
 const DEFAULT_WORKER_COUNT = navigator.hardwareConcurrency || 4
 // const DEFAULT_WORKER_COUNT = 1
@@ -94,7 +94,7 @@ class Mandelbrot {
     }
 
     _updatePrecision() {
-        this.requiredPrecision = this.zoom.multiply(fxp.fromNumber(this.width).withScale(this.zoom.scale)).flooredLog2() + 5
+        this.requiredPrecision = this.zoom.multiply(fxp.fromNumber(this.width).withScale(this.zoom.scale)).bits() + 5
         this.precision = Math.max(58, this.requiredPrecision)
         this.zoom = this.zoom.withScale(this.precision)
         this.center[0] = this.center[0].withScale(this.precision)
@@ -159,12 +159,13 @@ class Mandelbrot {
         }
 
         this._revokeJobToken()
+        let taskNumber = 0
         if (this.jobLevel < this.offscreens.length) {
             this._createJobToken();
-            let screen = this.offscreens[this.jobLevel];
-            let buffer = screen.buffer
-            let w = buffer.width
-            let h = buffer.height
+            const screen = this.offscreens[this.jobLevel];
+            const buffer = screen.buffer
+            const w = buffer.width
+            const h = buffer.height
             const paramHash = `${this.max_iter}-${this.smooth}`
 
             const frameTopLeft = this.canvas2complex(0, 0)
@@ -184,17 +185,19 @@ class Mandelbrot {
                         type: 'task',
                         jobId: this.jobId,
                         jobToken: this.jobToken,
+                        pixelSize: screen.scale,
+                        taskNumber: taskNumber++,
                         xOffset: firstCol,
                         yOffset: firstRow,
                         w: lastCol - firstCol,
                         h: lastRow - firstRow,
-                        topleft: this.canvas2complex(firstCol * screen.scale, firstRow * screen.scale),
-                        bottomright: this.canvas2complex(lastCol * screen.scale, lastRow * screen.scale),
+                        frameWidth: w,
+                        frameHeight: h,
                         frameTopLeft: frameTopLeft,
                         frameBottomRight: frameBottomRight,
                         paramHash: paramHash,
                         resetCaches: resetCaches,
-                        skipTopLeft: this.jobLevel > 0,
+                        skipTopLeft: false, //this.jobLevel > 0,
                         smooth: this.smooth,
                         maxIter: this.max_iter,
                         precision: this.precision,
@@ -591,8 +594,7 @@ function zoomWithFactor(factor, cooldown) {
     fractal.setZoom(fractal.zoom.multiply(bigFactor).max(lowerBound))
     const newPtr = fractal.canvas2complex(lastX, lastY)
     fractal.setCenter([fractal.center[0].add(ptr[0].subtract(newPtr[0])), fractal.center[1].add(ptr[1].subtract(newPtr[1]))])
-
-    scalesCanvas(bigFactor.toNumber(), lastX, lastY)
+    scaleCanvas(factor, lastX, lastY)
     redraw(false, cooldown);
 }
 
@@ -645,7 +647,8 @@ function onMouseMove(evt) {
 
 // scales the current canvas image by the given factor around the given point
 // This gives immediate feedback to the user, while the fractal is being rendered in the background
-function scalesCanvas(factor, x, y) {
+function scaleCanvas(factor, x, y) {
+    // console.log(`Scaling canvas by ${factor} around (${x}, ${y})`)
     const tempCtx = tempCanvas.getContext('2d');
     tempCtx.drawImage(canvasElement, 0, 0);
     const ctx = canvasElement.getContext('2d');
@@ -690,7 +693,7 @@ function toGraphicsCoordinates(x, y) {
 let devicePixelBoxSize = null
 
 function onResize(entries) {
-    let debugText = `${canvasElement.offsetWidth}x${canvasElement.offsetHeight}`
+    // let debugText = `${canvasElement.offsetWidth}x${canvasElement.offsetHeight}`
 
     devicePixelBoxSize = null
     if (entries && entries.length > 0) {

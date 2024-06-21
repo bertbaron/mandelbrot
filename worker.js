@@ -3,6 +3,7 @@ import {WorkerContext} from "./workerContext.mjs";
 import {MandelbrotFloat} from "./mandelbrotFloat.mjs";
 import {MandelbrotFxP} from "./mandelbrotFxP.mjs";
 import {MandelbrotPerturbation} from "./mandelbrotPerturbation.mjs";
+import {MandelbrotPerturbationExtFloat} from "./mandelbrotPerturbationExtFloat.mjs";
 
 const ctx = new WorkerContext()
 
@@ -21,9 +22,15 @@ async function initMandelbrotPerturbation() {
     return new MandelbrotPerturbation(ctx)
 }
 
+async function initMandelbrotPerturbationExtFloat() {
+    await new Promise(resolve => setTimeout(resolve, 1))
+    return new MandelbrotPerturbationExtFloat(ctx)
+}
+
 const mandelbrotFloat = initMandelbrotFloat();
 const mandelbrotFxP = initMandelbrotFxP();
 const mandelbrotPerturbation = initMandelbrotPerturbation();
+const mandelbrotPerturbationExtFloat = initMandelbrotPerturbationExtFloat();
 
 onmessage = handleMessage
 
@@ -32,23 +39,33 @@ const STOP_CHECK_INTERVAL = 200 + Math.floor(Math.random() * 100)
 
 async function handleMessage(msg) {
     const message = parseMessage(msg)
+    // console.log(`Received: ${JSON.stringify(msg.data)}`)
+    if (msg.pixelSize < 16) {
+        await new Promise(resolve => setTimeout(resolve, 2000))
+    }
 
     if (message.type === 'task') {
-        const impl = message.requiredPrecision > 58 ? await mandelbrotPerturbation : await mandelbrotFloat
-        // const impl = await mandelbrotFxP
+        const implPromise =
+            message.requiredPrecision > 1020
+                ? mandelbrotPerturbationExtFloat
+                : message.requiredPrecision > 58
+                    ? mandelbrotPerturbation
+                    : mandelbrotFloat
+        // const implPromise = mandelbrotFxP
+
+        const impl = await implPromise
+        // console.log(`Precision ${message.requiredPrecision}, using ${impl.constructor.name}`)
+
 
         ctx.initTask(message.jobToken)
         ctx.resetStats()
-        impl.onTask(message)
+        const result = impl.process(message)
+        postMessage(result)
     }
 }
 
 function parseMessage(msg) {
     if (msg.data.type === 'task') {
-        msg.data.topleft[0] = fxp.fromJSON(msg.data.topleft[0])
-        msg.data.topleft[1] = fxp.fromJSON(msg.data.topleft[1])
-        msg.data.bottomright[0] = fxp.fromJSON(msg.data.bottomright[0])
-        msg.data.bottomright[1] = fxp.fromJSON(msg.data.bottomright[1])
         msg.data.frameTopLeft[0] = fxp.fromJSON(msg.data.frameTopLeft[0])
         msg.data.frameTopLeft[1] = fxp.fromJSON(msg.data.frameTopLeft[1])
         msg.data.frameBottomRight[0] = fxp.fromJSON(msg.data.frameBottomRight[0])
