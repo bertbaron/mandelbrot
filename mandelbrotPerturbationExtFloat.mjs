@@ -77,7 +77,6 @@ export class MandelbrotPerturbationExtFloat {
     }
 
     calculate(values, smooth, w, h, skipTopLeft, task) {
-        const debugStr = task.taskNumber === 0 ? `${task.jobId}-${task.taskNumber}` : ``
         const stats = this.ctx.stats
         const scale = task.precision
         const bigScale = BigInt(scale)
@@ -100,11 +99,10 @@ export class MandelbrotPerturbationExtFloat {
             const y = Math.trunc(h / 2)
             const dr = (task.xOffset + x) / task.frameWidth * cWidth
             const di = (task.yOffset + y) / task.frameHeight * cHeight
-            this.referencePoints.push(this.calculate_reference(-scale, refr, refi, dr, di, bigScale, scale, bigBailout))
+            this.referencePoints.push(this.calculate_reference(refr, refi, dr, di, bigScale, scale, bigBailout))
             if (this.ctx.shouldStop()) return
         }
 
-        const debugFrame = [[300, 100], [350, 150]]
         // We queue reference points in LRU order, the head pointing to the least recently successfully used reference point
         let head = this.referencePoints.length - 1
         for (let y = 0; y < h; y++) {
@@ -152,7 +150,7 @@ export class MandelbrotPerturbationExtFloat {
                     const end = performance.now()
                     this.ctx.stats.timeSpendInLowPrecision += end - start
                     if (!found) {
-                        const newRef = this.calculate_reference(-scale, refr, refi, dr, di, bigScale, scale, bigBailout)
+                        const newRef = this.calculate_reference(refr, refi, dr, di, bigScale, scale, bigBailout)
                         values[offset] = smoothen(smooth, offset, newRef[1], Number(newRef[2] >> (bigScale - 60n)) * 2 ** -60)
                         this.referencePoints.unshift(newRef)
                         this.referencePoints[0] = this.referencePoints[head]
@@ -217,9 +215,8 @@ export class MandelbrotPerturbationExtFloat {
             // εₙ₊₁ = 2·zₙ·εₙ + εₙ² + δ = (2·zₙ + εₙ)·εₙ + δ
             const zr_ezr_2 = 2 * zr + ezr * eExpFactor
             const zi_ezi_2 = 2 * zi + ezi * eExpFactor
-            const _ezr = (zr_ezr_2 * ezr - zi_ezi_2 * ezi)
-            const _ezi = (zr_ezr_2 * ezi + zi_ezi_2 * ezr)
-
+            const _ezr = zr_ezr_2 * ezr - zi_ezi_2 * ezi
+            const _ezi = zr_ezr_2 * ezi + zi_ezi_2 * ezr
             ezr = _ezr + dcr
             ezi = _ezi + dci
         }
@@ -227,7 +224,6 @@ export class MandelbrotPerturbationExtFloat {
     }
 
     /**
-     * @param {number} dExp the initial exponent
      * @param {BigInt} refr fixed point reference point real part
      * @param {BigInt} refi fixed point reference point imaginary part
      * @param {number} dr the delta relative to the reference point real part as floating point with implicit exponent 2^-scale
@@ -237,16 +233,16 @@ export class MandelbrotPerturbationExtFloat {
      * @param {BigInt} bailout
      * @returns {[[fxp.FxP, fxp.FxP], number, BigInt, [number, number, number, number, number, number, number][]]} ((rr, ri), iter, zq, (zr, zi, zqErrorBound, zExp, zExpFactor, zEzpDeltaFactor, dExpZEzpDeltaFactor)[])
      */
-    calculate_reference(dExp, refr, refi, dr, di, scale, scaleValue, bailout) {
+    calculate_reference(refr, refi, dr, di, scale, scaleValue, bailout) {
         const start = performance.now()
         const rr = refr + BigInt(Math.round(dr))
         const ri = refi + BigInt(Math.round(di))
         const [iter, zq, seq] = this.mandelbrot_high_precision(rr, ri, this.max_iter, bailout, scale)
-        let lastExp = dExp
+        let lastExp = -scaleValue
 
         const iterations = seq.length
         const zs = seq.map(([zr, zi], idx) => {
-            const eExp = Math.round(dExp - (idx / iterations) * dExp)
+            const eExp = Math.round((idx / iterations) * scaleValue - scaleValue)
             const eExpDeltaFactor = 2 ** (lastExp-eExp)
             const eExpFactor = 2 ** eExp
             lastExp = eExp

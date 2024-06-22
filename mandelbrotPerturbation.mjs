@@ -144,6 +144,8 @@ export class MandelbrotPerturbation {
                         const newRef = this.calculate_reference(refr, refi, dr, di, bigScale, scaleFactor, bigBailout)
                         values[offset] = smoothen(smooth, offset, newRef[1], Number(newRef[2]) / scaleFactor)
                         this.referencePoints.unshift(newRef)
+                        this.referencePoints[0] = this.referencePoints[head]
+                        this.referencePoints[head] = newRef
                         if (this.ctx.shouldStop()) return
                     }
                 }
@@ -190,8 +192,8 @@ export class MandelbrotPerturbation {
             }
 
             // εₙ₊₁ = 2·zₙ·εₙ + εₙ² + δ = (2·zₙ + εₙ)·εₙ + δ
-            let zr_ezr_2 = 2 * zr + ezr;
-            let zi_ezi_2 = 2 * zi + ezi;
+            const zr_ezr_2 = 2 * zr + ezr
+            const zi_ezi_2 = 2 * zi + ezi
             const _ezr = zr_ezr_2 * ezr - zi_ezi_2 * ezi
             const _ezi = zr_ezr_2 * ezi + zi_ezi_2 * ezr
             ezr = _ezr + dcr
