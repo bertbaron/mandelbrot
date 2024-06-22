@@ -42,6 +42,9 @@ export class WorkerContext {
     }
 
     _shouldStop(jobToken) {
+        if (!jobToken) {
+            return false
+        }
         let xhr = new XMLHttpRequest();
         xhr.open("GET", jobToken, /* async= */false);
         try {
