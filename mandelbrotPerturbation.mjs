@@ -172,8 +172,6 @@ export class MandelbrotPerturbation {
                 return [2, 0]
             }
             if (iter >= zs.length) {
-                // TODO make sure we don't get here by pre-caclulating enough (how do we know how many?) or extending the sequence from here
-                // console.log('Not enough reference points')
                 return [-1, zzq]
             }
 
@@ -182,8 +180,6 @@ export class MandelbrotPerturbation {
             const zr = _zsvalues[0]
             const zi = _zsvalues[1]
             const zqErrorBound = _zsvalues[2]
-
-            // console.log(`n: ${iter}, Zₙ: ${asString([zr, zi])}, εₙ: ${asString([ezr, ezi])}, |Zₙ|²: ${asString(zqErrorBound)}`)
 
             // Z'ₙ = Zₙ + εₙ
             const zzr = zr + ezr
@@ -200,7 +196,6 @@ export class MandelbrotPerturbation {
             const _ezi = zr_ezr_2 * ezi + zi_ezi_2 * ezr
             ezr = _ezr + dcr
             ezi = _ezi + dci
-            // console.log(`εₙ₊₁r: ${asString(ezr)} = ${asString(_ezr)} + ${asString(dcr)}`)
         }
         return [iter + 4, zzq]
     }
@@ -221,7 +216,6 @@ export class MandelbrotPerturbation {
         const ri = refi + BigInt(Math.round(di * scaleFactor))
         const [iter, zq, seq] = this.mandelbrot_high_precision(rr, ri, this.max_iter, bailout, bigScale)
         const zs = seq.map(([zr, zi]) => {
-            // TODO Zq is already calculated. And dividing by factor of 2 may be faster
             let z_real = Number(zr) / scaleFactor;
             let z_imag = Number(zi) / scaleFactor;
             return [z_real, z_imag, (z_real * z_real + z_imag * z_imag) * 0.000001];
@@ -255,20 +249,14 @@ export class MandelbrotPerturbation {
             }
             zi = (zr * zi >> scale_1) + im
             zr = zrq - ziq + re
+            seq.push([zr, zi])
             zrq = (zr * zr) >> scale
             ziq = (zi * zi) >> scale
             zq = zrq + ziq
-            seq.push([zr, zi])
         }
+        zi = (zr * zi >> scale_1) + im
+        zr = zrq - ziq + re
+        seq.push([zr, zi])
         return [iter + 4, zq, seq]
     }
-}
-
-function asString(nr) {
-    // If it is a list, format it as tuple recursively
-    if (Array.isArray(nr)) {
-        return `(${nr.map(asString).join(', ')})`
-    }
-    // Format the number in scientific notation with two decimal places
-    return (nr < 0 ? '' : ' ') + nr.toExponential(2)
 }

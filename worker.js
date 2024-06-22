@@ -40,9 +40,6 @@ const STOP_CHECK_INTERVAL = 200 + Math.floor(Math.random() * 100)
 async function handleMessage(msg) {
     const message = parseMessage(msg)
     // console.log(`Received: ${JSON.stringify(msg.data)}`)
-    if (msg.pixelSize < 16) {
-        await new Promise(resolve => setTimeout(resolve, 2000))
-    }
 
     if (message.type === 'task') {
         const implPromise =

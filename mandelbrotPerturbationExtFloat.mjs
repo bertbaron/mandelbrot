@@ -155,6 +155,8 @@ export class MandelbrotPerturbationExtFloat {
                         const newRef = this.calculate_reference(-scale, refr, refi, dr, di, bigScale, scale, bigBailout)
                         values[offset] = smoothen(smooth, offset, newRef[1], Number(newRef[2] >> (bigScale - 60n)) * 2 ** -60)
                         this.referencePoints.unshift(newRef)
+                        this.referencePoints[0] = this.referencePoints[head]
+                        this.referencePoints[head] = newRef
                         if (this.ctx.shouldStop()) return
                     }
                 }
@@ -284,11 +286,14 @@ export class MandelbrotPerturbationExtFloat {
             }
             zi = (zr * zi >> scale_1) + im
             zr = zrq - ziq + re
+            seq.push([zr, zi])
             zrq = (zr * zr) >> scale
             ziq = (zi * zi) >> scale
             zq = zrq + ziq
-            seq.push([zr, zi])
         }
+        zi = (zr * zi >> scale_1) + im
+        zr = zrq - ziq + re
+        seq.push([zr, zi])
         return [iter + 4, zq, seq]
     }
 }

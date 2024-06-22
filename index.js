@@ -197,7 +197,7 @@ class Mandelbrot {
                         frameBottomRight: frameBottomRight,
                         paramHash: paramHash,
                         resetCaches: resetCaches,
-                        skipTopLeft: false, //this.jobLevel > 0,
+                        skipTopLeft: this.jobLevel > 0,
                         smooth: this.smooth,
                         maxIter: this.max_iter,
                         precision: this.precision,
