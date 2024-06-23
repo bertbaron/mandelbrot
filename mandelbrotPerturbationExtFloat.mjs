@@ -29,30 +29,28 @@ export class MandelbrotPerturbationExtFloat {
 
         if (task.jobId !== this.jobId) {
             this.jobId = task.jobId
-            if (this.paramHash !== task.paramHash || this.referencePoints.length === 0 || task.resetCaches) {
+            // FIXME we have to correct the dr and di since the reference points might have changed, hence the true for now
+            if (this.paramHash !== task.paramHash || this.referencePoints.length === 0 || task.resetCaches || true) {
                 this.paramHash = task.paramHash
                 this.referencePoints = []
             } else {
                 // Keep reference points that are within the total frame when job parameters did not change
                 const oldReferencePoints = this.referencePoints
                 this.referencePoints = []
-                const oldScale = oldReferencePoints[0][0][0].scale
+                const oldScale = this.precision
                 const newScale = task.precision
                 if (newScale <= oldScale) {
-                    const rmin = task.frameTopLeft[0].withScale(oldScale).bigInt
-                    const rmax = task.frameBottomRight[0].withScale(oldScale).bigInt
-                    const imin = task.frameTopLeft[1].withScale(oldScale).bigInt
-                    const imax = task.frameBottomRight[1].withScale(oldScale).bigInt
                     for (let referencePoint of oldReferencePoints) {
-                        const rr = referencePoint[0][0].bigInt
-                        const ri = referencePoint[0][1].bigInt
-                        if (rr >= rmin && rr <= rmax && ri >= imin && ri <= imax) {
+                        const dr = referencePoint[0][0]
+                        const di = referencePoint[0][1]
+                        if (dr < cWidth && di < cHeight) {
                             referencePoint[0] = [referencePoint[0][0].withScale(newScale), referencePoint[0][1].withScale(newScale)]
                             this.referencePoints.push(referencePoint)
                         }
                     }
                 }
             }
+            this.precision = task.precision
         }
 
 

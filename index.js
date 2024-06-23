@@ -169,7 +169,9 @@ class Mandelbrot {
             const paramHash = `${this.max_iter}-${this.smooth}`
 
             const frameTopLeft = this.canvas2complex(0, 0)
-            const frameBottomRight = this.canvas2complex(this.width, this.height)
+            // We need to adjust for the case that the width or height is not dividable by the pixel size
+            const roundup = (value) => Math.ceil(value / screen.scale) * screen.scale
+            const frameBottomRight = this.canvas2complex(roundup(this.width), roundup(this.height))
 
             // For the fast low-precision calculations we could render rows to make calculating and rendering even faster
             // for now we focus on optimizing the heavy calculations where squares may provide a benefit
