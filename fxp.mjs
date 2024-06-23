@@ -86,14 +86,7 @@ export class FxP {
      * @returns {number}
      */
     toNumber() {
-        let exp = -this.scale
-        const size = bits(this.bigInt)
-        if (size > 53) {
-            const preScale = size - 53
-            const n = Number(this.bigInt >> BigInt(preScale))
-            return n * 2 ** (exp + preScale)
-        }
-        return Number(this.bigInt) * 2 ** exp
+        return toNumber(this.bigInt, this.scale)
     }
 
     bigIntValue() {
@@ -131,6 +124,17 @@ export function fromNumber(value, scale = 60) {
 export function fromIntNumber(value, scale = 60) {
     const bigScale = BigInt(scale)
     return new FxP(BigInt(value) << bigScale, scale, bigScale)
+}
+
+export function toNumber(bigInt, scale) {
+    let exp = -scale
+    const size = bits(bigInt)
+    if (size > 512) {
+        const preScale = size - 512
+        const n = Number(bigInt >> BigInt(preScale))
+        return n * 2 ** (exp + preScale)
+    }
+    return Number(bigInt) * 2 ** exp
 }
 
 /**

@@ -99,7 +99,7 @@ export class MandelbrotPerturbationExtFloat {
             const y = Math.trunc(h / 2)
             const dr = (task.xOffset + x) / task.frameWidth * cWidth
             const di = (task.yOffset + y) / task.frameHeight * cHeight
-            this.referencePoints.push(this.calculate_reference(refr, refi, dr, di, bigScale, scale, bigBailout))
+            this.referencePoints.push(this.calculate_reference(refr, refi, dr, di, bigScale, scale, bailout))
             if (this.ctx.shouldStop()) return
         }
 
@@ -150,8 +150,8 @@ export class MandelbrotPerturbationExtFloat {
                     const end = performance.now()
                     this.ctx.stats.timeSpendInLowPrecision += end - start
                     if (!found) {
-                        const newRef = this.calculate_reference(refr, refi, dr, di, bigScale, scale, bigBailout)
-                        values[offset] = smoothen(smooth, offset, newRef[1], Number(newRef[2] >> (bigScale - 60n)) * 2 ** -60)
+                        const newRef = this.calculate_reference(refr, refi, dr, di, bigScale, scale, bailout)
+                        values[offset] = smoothen(smooth, offset, newRef[1], newRef[2])
                         this.referencePoints.unshift(newRef)
                         this.referencePoints[0] = this.referencePoints[head]
                         this.referencePoints[head] = newRef
@@ -170,7 +170,7 @@ export class MandelbrotPerturbationExtFloat {
      * @param {number} max_iter
      * @param {number} bailout
      * @param {[number, number, number, number, number, number, number][]} zs (zr, zi, zq, zExp, zExpFactor, zEzpDeltaFactor, dExpZEzpDeltaFactor)[]
-     * @returns {(number|number)[]|number[]}
+     * @returns {[number, number]} [iter, zq]
      */
     mandlebrot_perturbation(dExp, dcr, dci, max_iter, bailout, zs) {
 
@@ -228,30 +228,25 @@ export class MandelbrotPerturbationExtFloat {
      * @param {BigInt} refi fixed point reference point imaginary part
      * @param {number} dr the delta relative to the reference point real part as floating point with implicit exponent 2^-scale
      * @param {number} di the delta relative to the reference point imaginary part as floating point with implicit exponent 2^-scale
-     * @param {BigInt} scale
-     * @param {number} scaleValue
-     * @param {BigInt} bailout
-     * @returns {[[fxp.FxP, fxp.FxP], number, BigInt, [number, number, number, number, number, number, number][]]} ((rr, ri), iter, zq, (zr, zi, zqErrorBound, zExp, zExpFactor, zEzpDeltaFactor, dExpZEzpDeltaFactor)[])
+     * @param {BigInt} bigScale
+     * @param {number} scale
+     * @param {number} bailout
+     * @returns {[[number, number], number, number, [number, number, number, number, number, number][]]} ((rr, ri), iter, zq, (zr, zi, zqErrorBound, zExp, zExpFactor, zEzpDeltaFactor)[])
      */
-    calculate_reference(refr, refi, dr, di, scale, scaleValue, bailout) {
+    calculate_reference(refr, refi, dr, di, bigScale, scale, bailout) {
         const start = performance.now()
         const rr = refr + BigInt(Math.round(dr))
         const ri = refi + BigInt(Math.round(di))
-        const [iter, zq, seq] = this.mandelbrot_high_precision(rr, ri, this.max_iter, bailout, scale)
-        let lastExp = -scaleValue
+        const [iter, zq, seq] = this.mandelbrot_high_precision(rr, ri, this.max_iter, bailout, bigScale, scale)
+        let lastExp = -scale
 
         const iterations = seq.length
-        const zs = seq.map(([zr, zi], idx) => {
-            const eExp = Math.round((idx / iterations) * scaleValue - scaleValue)
+        const zs = seq.map(([zr, zi, zq], idx) => {
+            const eExp = Math.round((idx / iterations) * scale - scale)
             const eExpDeltaFactor = 2 ** (lastExp-eExp)
             const eExpFactor = 2 ** eExp
             lastExp = eExp
-
-            const z_real = new fxp.FxP(zr, scaleValue, scale).toNumber()
-            const z_imag = new fxp.FxP(zi, scaleValue, scale).toNumber()
-            const zq = ( z_real * z_real + z_imag * z_imag) * 0.000001
-
-            return [z_real, z_imag, zq, eExp, eExpFactor, eExpDeltaFactor]
+            return [zr, zi, zq, eExp, eExpFactor, eExpDeltaFactor]
         })
         const end = performance.now()
         this.ctx.stats.timeSpendInHighPrecision += end - start
@@ -263,33 +258,38 @@ export class MandelbrotPerturbationExtFloat {
      * @param {BigInt} re
      * @param {BigInt} im
      * @param {number} max_iter
-     * @param {BigInt} bailout
-     * @param {BigInt} scale
-     * @returns {[number, BigInt, [BigInt, BigInt][]]} [iterations, zq, sequence] where sequence is a list of [zr, zi] points
+     * @param {number} bailout
+     * @param {BigInt} bigScale
+     * @param {number} scale
+     * @returns {[number, BigInt, [number, number, zq][]]} [iterations, zq, sequence] where sequence is a list of [zr, zi, zq] tuples
      */
-    mandelbrot_high_precision(re, im, max_iter, bailout, scale) {
-        const scale_1 = scale - 1n
+    mandelbrot_high_precision(re, im, max_iter, bailout, bigScale, scale) {
+        const scale_1 = bigScale - 1n
         let zr = 0n
         let zi = 0n
         let iter = -1
         let zrq = 0n
         let ziq = 0n
-        let zq = 0n
+        let zq = 0
         const seq = []
         while (zq <= bailout) {
             if (iter++ === max_iter) {
-                return [2, 0n, seq]
+                return [2, 0, seq]
             }
             zi = (zr * zi >> scale_1) + im
             zr = zrq - ziq + re
-            seq.push([zr, zi])
-            zrq = (zr * zr) >> scale
-            ziq = (zi * zi) >> scale
-            zq = zrq + ziq
+            zrq = (zr * zr) >> bigScale
+            ziq = (zi * zi) >> bigScale
+            const z_real = fxp.toNumber(zr, scale)
+            const z_imag = fxp.toNumber(zi, scale)
+            zq = z_real * z_real + z_imag * z_imag
+            seq.push([z_real, z_imag, zq * 0.000001])
         }
         zi = (zr * zi >> scale_1) + im
         zr = zrq - ziq + re
-        seq.push([zr, zi])
+        const z_real = fxp.toNumber(zr, scale)
+        const z_imag = fxp.toNumber(zi, scale)
+        seq.push([z_real, z_imag, z_real * z_real + z_imag * z_imag])
         return [iter + 4, zq, seq]
     }
 }
