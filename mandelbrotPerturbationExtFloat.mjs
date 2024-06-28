@@ -27,33 +27,6 @@ export class MandelbrotPerturbationExtFloat {
         const w = task.w
         const h = task.h
 
-        if (task.jobId !== this.jobId) {
-            this.jobId = task.jobId
-            // FIXME we have to correct the dr and di since the reference points might have changed, hence the true for now
-            if (this.paramHash !== task.paramHash || this.referencePoints.length === 0 || task.resetCaches || true) {
-                this.paramHash = task.paramHash
-                this.referencePoints = []
-            } else {
-                // Keep reference points that are within the total frame when job parameters did not change
-                const oldReferencePoints = this.referencePoints
-                this.referencePoints = []
-                const oldScale = this.precision
-                const newScale = task.precision
-                if (newScale <= oldScale) {
-                    for (let referencePoint of oldReferencePoints) {
-                        const dr = referencePoint[0][0]
-                        const di = referencePoint[0][1]
-                        if (dr < cWidth && di < cHeight) {
-                            referencePoint[0] = [referencePoint[0][0].withScale(newScale), referencePoint[0][1].withScale(newScale)]
-                            this.referencePoints.push(referencePoint)
-                        }
-                    }
-                }
-            }
-            this.precision = task.precision
-        }
-
-
         const values = new Int32Array(w * h)
         const smooth = task.smooth ? new Uint8ClampedArray(w * h) : null
         const start = performance.now()
@@ -78,10 +51,10 @@ export class MandelbrotPerturbationExtFloat {
         const stats = this.ctx.stats
         const scale = task.precision
         const bigScale = BigInt(scale)
-        const rmin = (task.frameTopLeft)[0]
-        const rmax = (task.frameBottomRight)[0]
-        const imin = (task.frameTopLeft)[1]
-        const imax = (task.frameBottomRight)[1]
+        const rmin = task.frameTopLeft[0]
+        const rmax = task.frameBottomRight[0]
+        const imin = task.frameTopLeft[1]
+        const imax = task.frameBottomRight[1]
 
         // Size in the complex plane with implicit exponent 2^-scale
         const cWidth = Number(rmax.subtract(rmin).bigInt)
@@ -90,7 +63,8 @@ export class MandelbrotPerturbationExtFloat {
         const refi = imin.bigInt
 
         const bailout = smooth ? 128 : 4
-        const bigBailout = BigInt(bailout) << bigScale
+
+        this.updateCache(task, cWidth, cHeight)
 
         if (this.referencePoints.length === 0) {
             const x = Math.trunc(w / 2)
@@ -161,6 +135,36 @@ export class MandelbrotPerturbationExtFloat {
         }
     }
 
+    updateCache(task, cWidth, cHeight) {
+        if (task.jobId !== this.jobId) {
+            this.jobId = task.jobId
+            if (this.paramHash !== task.paramHash || this.referencePoints.length === 0 || task.resetCaches) {
+                this.paramHash = task.paramHash
+                this.referencePoints = []
+            } else {
+                // Keep reference points that are within the total frame when job parameters did not change
+                const oldReferencePoints = this.referencePoints
+                this.referencePoints = []
+                const oldPrecision = this.precision
+                const newPrecision = task.precision
+                if (newPrecision === oldPrecision) {  // <= requires adjusting the reference points because implicit scale changes
+                    const deltar = Number(task.frameTopLeft[0].subtract(this.topLeft[0]).bigInt)
+                    const deltai = Number(task.frameTopLeft[1].subtract(this.topLeft[1]).bigInt)
+                    for (let referencePoint of oldReferencePoints) {
+                        const dr = referencePoint[0][0] - deltar
+                        const di = referencePoint[0][1] - deltai
+                        if (dr < cWidth && di < cHeight) {
+                            referencePoint[0] = [dr, di]
+                            this.referencePoints.push(referencePoint)
+                        }
+                    }
+                }
+            }
+            this.precision = task.precision
+            this.topLeft = task.frameTopLeft
+        }
+    }
+
     /**
      * @param {number} dExp exp of dcr and dci
      * @param {number} dcr
@@ -175,7 +179,6 @@ export class MandelbrotPerturbationExtFloat {
         // ε₀ = δ
         let ezr = dcr
         let ezi = dci
-        let eExp = dExp
 
         let iter = -1
         let zzq = 0
@@ -189,14 +192,12 @@ export class MandelbrotPerturbationExtFloat {
 
             // Zₙ
             const _zsvalues = zs[iter]
-            const newEExp = _zsvalues[3]
-            const eExpFactor = _zsvalues[4]  // 2 ** eExp
-            const eExpDeltaFactor = _zsvalues[5]  // 2 ** (eExp - newEExp);
+            const eExpFactor = _zsvalues[3]  // 2 ** eExp
+            const eExpDeltaFactor = _zsvalues[4]  // 2 ** (eExp - newEExp)
             ezr *= eExpDeltaFactor
             ezi *= eExpDeltaFactor
             dcr *= eExpDeltaFactor
             dci *= eExpDeltaFactor
-            eExp = newEExp
 
             const zr = _zsvalues[0]
             const zi = _zsvalues[1]
@@ -211,8 +212,8 @@ export class MandelbrotPerturbationExtFloat {
             }
 
             // εₙ₊₁ = 2·zₙ·εₙ + εₙ² + δ = (2·zₙ + εₙ)·εₙ + δ
-            const zr_ezr_2 = 2 * zr + ezr * eExpFactor
-            const zi_ezi_2 = 2 * zi + ezi * eExpFactor
+            const zr_ezr_2 = zr + zzr
+            const zi_ezi_2 = zi + zzi
             const _ezr = zr_ezr_2 * ezr - zi_ezi_2 * ezi
             const _ezi = zr_ezr_2 * ezi + zi_ezi_2 * ezr
             ezr = _ezr + dcr
@@ -229,7 +230,7 @@ export class MandelbrotPerturbationExtFloat {
      * @param {BigInt} bigScale
      * @param {number} scale
      * @param {number} bailout
-     * @returns {[[number, number], number, number, [number, number, number, number, number, number][]]} ((rr, ri), iter, zq, (zr, zi, zqErrorBound, zExp, zExpFactor, zEzpDeltaFactor)[])
+     * @returns {[[number, number], number, number, [number, number, number, number, number][]]} ((rr, ri), iter, zq, (zr, zi, zqErrorBound, zExpFactor, zEzpDeltaFactor)[])
      */
     calculate_reference(refr, refi, dr, di, bigScale, scale, bailout) {
         const start = performance.now()
@@ -244,7 +245,7 @@ export class MandelbrotPerturbationExtFloat {
             const eExpDeltaFactor = 2 ** (lastExp-eExp)
             const eExpFactor = 2 ** eExp
             lastExp = eExp
-            return [zr, zi, zq, eExp, eExpFactor, eExpDeltaFactor]
+            return [zr, zi, zq, eExpFactor, eExpDeltaFactor]
         })
         const end = performance.now()
         this.ctx.stats.timeSpendInHighPrecision += end - start

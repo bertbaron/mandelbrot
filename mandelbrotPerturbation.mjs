@@ -12,37 +12,10 @@ export class MandelbrotPerturbation {
         this.referencePoints = []
     }
 
-    process(task) {
+    process(task){
         this.max_iter = task.maxIter
         const w = task.w
         const h = task.h
-
-        if (task.jobId !== this.jobId) {
-            this.jobId = task.jobId
-            // FIXME we have to correct the dr and di since the reference points might have changed, hence the true for now
-            if (this.paramHash !== task.paramHash || this.referencePoints.length === 0 || task.resetCaches || true) {
-                this.paramHash = task.paramHash
-                this.referencePoints = []
-            } else {
-                // Keep reference points that are within the total frame when job parameters did not change
-                const oldReferencePoints = this.referencePoints
-                this.referencePoints = []
-                const oldScale = this.precision
-                const newScale = task.precision
-                if (newScale <= oldScale) {
-                    for (let referencePoint of oldReferencePoints) {
-                        const dr = referencePoint[0][0]
-                        const di = referencePoint[0][1]
-                        if (dr < cWidth && di < cHeight) {
-                            referencePoint[0] = [referencePoint[0][0].withScale(newScale), referencePoint[0][1].withScale(newScale)]
-                            this.referencePoints.push(referencePoint)
-                        }
-                    }
-                }
-            }
-            this.precision = task.precision
-        }
-
 
         const values = new Int32Array(w * h)
         const smooth = task.smooth ? new Uint8ClampedArray(w * h) : null
@@ -69,10 +42,10 @@ export class MandelbrotPerturbation {
         const scale = task.precision
         const scaleFactor = Math.pow(2, Number(scale))
         const bigScale = BigInt(scale)
-        const rmin = (task.frameTopLeft)[0]
-        const rmax = (task.frameBottomRight)[0]
-        const imin = (task.frameTopLeft)[1]
-        const imax = (task.frameBottomRight)[1]
+        const rmin = task.frameTopLeft[0]
+        const rmax = task.frameBottomRight[0]
+        const imin = task.frameTopLeft[1]
+        const imax = task.frameBottomRight[1]
 
         // Size in the complex plane
         const cWidth = Number(rmax.subtract(rmin).bigInt) / scaleFactor
@@ -82,6 +55,8 @@ export class MandelbrotPerturbation {
 
         const bailout = smooth ? 128 : 4
         const bigBailout = BigInt(bailout) << bigScale
+
+        this.updateCache(task, cWidth, cHeight, scaleFactor)
 
         if (this.referencePoints.length === 0) {
             const x = Math.trunc(w / 2)
@@ -152,6 +127,36 @@ export class MandelbrotPerturbation {
         }
     }
 
+    updateCache(task, cWidth, cHeight, scaleFactor) {
+        if (task.jobId !== this.jobId) {
+            this.jobId = task.jobId
+            if (this.paramHash !== task.paramHash || this.referencePoints.length === 0 || task.resetCaches) {
+                this.paramHash = task.paramHash
+                this.referencePoints = []
+            } else {
+                // Keep reference points that are within the total frame when job parameters did not change
+                const oldReferencePoints = this.referencePoints
+                this.referencePoints = []
+                const oldPrecision = this.precision
+                const newPrecision = task.precision
+                if (newPrecision === oldPrecision) {
+                    const deltar = Number(task.frameTopLeft[0].subtract(this.topLeft[0]).bigInt) / scaleFactor
+                    const deltai = Number(task.frameTopLeft[1].subtract(this.topLeft[1]).bigInt) / scaleFactor
+                    for (let referencePoint of oldReferencePoints) {
+                        const dr = referencePoint[0][0] - deltar
+                        const di = referencePoint[0][1] - deltai
+                        if (dr < cWidth && di < cHeight) {
+                            referencePoint[0] = [dr, di]
+                            this.referencePoints.push(referencePoint)
+                        }
+                    }
+                }
+            }
+            this.precision = task.precision
+            this.topLeft = task.frameTopLeft
+        }
+    }
+
     /**
      * @param {number} dcr
      * @param {number} dci
@@ -190,8 +195,8 @@ export class MandelbrotPerturbation {
             }
 
             // εₙ₊₁ = 2·zₙ·εₙ + εₙ² + δ = (2·zₙ + εₙ)·εₙ + δ
-            const zr_ezr_2 = 2 * zr + ezr
-            const zi_ezi_2 = 2 * zi + ezi
+            const zr_ezr_2 = zr + zzr
+            const zi_ezi_2 = zi + zzi
             const _ezr = zr_ezr_2 * ezr - zi_ezi_2 * ezi
             const _ezi = zr_ezr_2 * ezi + zi_ezi_2 * ezr
             ezr = _ezr + dcr
