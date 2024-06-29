@@ -1,10 +1,12 @@
 import * as fxp from './fxp.mjs'
 import * as palette from './palette.js'
 import * as favorites from './favorites.js'
+import * as mgpu from './mandelbrotWebGPU.mjs'
+import {WorkerContext} from "./workerContext.mjs";
 
-const SQUARE_SIZE = 30 // must be even or -1 for full-frame tasks
+const SQUARE_SIZE = 32 // must be even or -1 for full-frame tasks
 const DEFAULT_ITERATIONS = 1000
-const DEFAULT_WORKER_COUNT = navigator.hardwareConcurrency || 4
+const DEFAULT_WORKER_COUNT   = navigator.hardwareConcurrency || 4
 // const DEFAULT_WORKER_COUNT = 1
 
 const MIN_PIXEL_SIZE = 1
@@ -52,10 +54,13 @@ class Mandelbrot {
             this.workers.push(worker)
         }
 
+        this.mandelbrotGpu = new mgpu.MandelbrotWebGPU(this, new WorkerContext())
+
         this.zoom = fxp.fromNumber(1)
         this.center = [fxp.fromNumber(-0.5), fxp.fromNumber(0)]
         this.max_iter = DEFAULT_ITERATIONS
         this.smooth = true
+        this.useGpu = false
 
         this.palette = []
         this.paletteComponent = paletteComponent
@@ -95,7 +100,11 @@ class Mandelbrot {
 
     _updatePrecision() {
         this.requiredPrecision = this.zoom.multiply(fxp.fromNumber(this.width).withScale(this.zoom.scale)).bits() + 5
-        this.precision = Math.max(58, this.requiredPrecision)
+        if (this.useGpu) {
+            this.precision = Math.max(64, Math.ceil(this.requiredPrecision / 8) * 8)
+        } else {
+            this.precision = Math.max(58, this.requiredPrecision)
+        }
         this.zoom = this.zoom.withScale(this.precision)
         this.center[0] = this.center[0].withScale(this.precision)
         this.center[1] = this.center[1].withScale(this.precision)
@@ -140,6 +149,10 @@ class Mandelbrot {
     }
 
     startNextJob(resetCaches) {
+        if (this.useGpu) {
+            this.startNextGpuJob(resetCaches)
+            return
+        }
         this.jobLevel++
         if (!this.permalinkUpdated && (this.jobLevel === this.offscreens.length || performance.now() > this.jobStartTime + 500)) {
             this.permalinkUpdated = true
@@ -216,12 +229,16 @@ class Mandelbrot {
             if (this.stats.time !== 0) {
                 const time = this.stats.time
                 const hpPercent = this.stats.timeHighPrecision / time * 100
-                // console.log(`Calculation time: ${this.stats.time.toFixed(0)}ms (${hpPercent.toFixed(0)}% in ${this.stats.highPrecisionCalculations} high precision points), ${this.stats.lowPrecisionMisses} low precision misses`)
+                console.log(`Calculation time: ${this.stats.time.toFixed(0)}ms (${hpPercent.toFixed(0)}% in ${this.stats.highPrecisionCalculations} high precision points), ${this.stats.lowPrecisionMisses} low precision misses`)
             }
         }
     }
 
     onResult(answer) {
+        if (this.useGpu) {
+            this.onGpuResult(answer)
+            return
+        }
         // console.log(`Received answer from worker`)
         const task = answer.task
         if (task.jobToken !== this.jobToken) {
@@ -264,6 +281,71 @@ class Mandelbrot {
         }
     }
 
+    startNextGpuJob(resetCaches) {
+        this._revokeJobToken()
+        this._createJobToken();
+
+        const screen = this.offscreens[this.offscreens.length - 1]
+        const w = screen.buffer.width
+        const h = screen.buffer.height
+
+        this.progress.start(w * h)
+        const paramHash = `${this.max_iter}-${this.smooth}`
+        const frameTopLeft = this.canvas2complex(0, 0)
+        // We need to adjust for the case that the width or height is not dividable by the pixel size
+        const roundup = (value) => Math.ceil(value / screen.scale) * screen.scale
+        const frameBottomRight = this.canvas2complex(roundup(this.width), roundup(this.height))
+
+        const task = {
+            type: 'task',
+            jobId: this.jobId,
+            jobToken: this.jobToken,
+            pixelSize: screen.scale,
+            taskNumber: 0,
+            xOffset: 0,
+            yOffset: 0,
+            w: w,
+            h: h,
+            frameWidth: w,
+            frameHeight: h,
+            frameTopLeft: frameTopLeft,
+            frameBottomRight: frameBottomRight,
+            paramHash: paramHash,
+            resetCaches: resetCaches,
+            skipTopLeft: false,
+            smooth: this.smooth,
+            maxIter: this.max_iter,
+            precision: this.precision,
+            requiredPrecision: this.requiredPrecision
+        }
+        this.mandelbrotGpu.process(task)
+    }
+
+    onGpuResult(answer) {
+        console.log(`Received worker answer`)
+    }
+
+    onGpuUpdate(answer) {
+        if (answer.jobToken !== this.jobToken) {
+            console.log("Outdated job")
+            return
+        }
+
+        const screen = this.offscreens[this.offscreens.length - 1]
+        screen.values.set(answer.values)
+        if (this.smooth) {
+            screen.smooth.set(answer.smooth)
+        }
+        let progress = answer.isFinished ? this.progress.tasks : Math.round((this.progress.tasks - this.progress.done) / 2)
+        this.progress.update(progress)
+        screen.render(this.palette, this.max_iter, this.smooth)
+
+        if (!this.permalinkUpdated && (answer.isFinished || performance.now() > this.jobStartTime + 500)) {
+            this.permalinkUpdated = true
+            updatePermalink()
+        }
+    }
+
     async render(resetCaches) {
         this.taskqueue.length = 0
         this.jobId++
@@ -273,14 +355,6 @@ class Mandelbrot {
         this.resetStats()
         // console.log('Rendering...')
         this.startNextJob(resetCaches)
-    }
-
-    // returns the last calculated value from the buffer, during rendering this may be inaccurate
-    valueAt(x, y) {
-        // todo fallback on higher layer when transparent
-        const offscreen = this.offscreens[this.offscreens.length - 1]
-        const index = y * this.width + x
-        return offscreen.values[index]
     }
 
     // x and y are canvas integer, returns a fixed-point complex number
@@ -382,8 +456,8 @@ class ProgressMonitor {
         this.canvas.style.display = 'block'
     }
 
-    update() {
-        this.done++
+    update(amount = 1) {
+        this.done = Math.min(this.done + amount, this.tasks)
         const now = performance.now()
         if (now - this.lastUpdate > 100) {
             const percent = this.done / this.tasks * 100
@@ -398,6 +472,10 @@ class ProgressMonitor {
             document.getElementById('renderTimeValue').innerText = `${jobTime.toFixed(0)}ms`
             this.canvas.style.display = 'none'
         }
+    }
+
+    finish() {
+        this.update(this.tasks)
     }
 
     _draw(percentage) {
@@ -708,7 +786,7 @@ function onResize(entries) {
             }
         }
     }
-    fullResSwitch.disabled = devicePixelBoxSize == null
+    fullResToggle.disabled = devicePixelBoxSize == null
     resizeToCanvasSize()
 }
 
@@ -716,7 +794,7 @@ function resizeToCanvasSize() {
     let width = canvasElement.offsetWidth
     let height = canvasElement.offsetHeight
 
-    if (fullResSwitch.checked && devicePixelBoxSize != null) {
+    if (fullResToggle.checked && devicePixelBoxSize != null) {
         [width, height] = devicePixelBoxSize
     }
 
@@ -741,25 +819,6 @@ function toggleFullScreen() {
 }
 
 const ELEMENTS_WITH_FS_CLASS = ['mandelbrot', 'palette-canvas', 'settings', 'footer', 'menu-toggle']
-addEventListener("fullscreenchange", (event) => {
-    if (document.fullscreenElement) {
-        for (let element of ELEMENTS_WITH_FS_CLASS) {
-            document.getElementById(element).classList.add('fullscreen')
-        }
-        document.documentElement.setAttribute('data-bs-theme', 'dark')
-        // hide menu-toggle and menu
-        document.getElementById('menu-toggle').classList.add('hidden')
-        document.getElementById('settings').classList.add('hidden')
-
-    } else {
-        for (let element of ELEMENTS_WITH_FS_CLASS) {
-            document.getElementById(element).classList.remove('fullscreen')
-        }
-        document.documentElement.setAttribute('data-bs-theme', 'light')
-    }
-});
-
-new ResizeObserver(onResize).observe(canvasElement)
 
 function resizeTmpCanvas() {
     tempCanvas.width = canvasElement.width
@@ -771,80 +830,140 @@ const debugElement = document.getElementById('debug')
 const appElement = document.getElementById('app')
 const iterationsElement = document.getElementById('max-iterations')
 const fullScreenButton = document.getElementById('fullscreen')
-const smoothElement = document.getElementById('smooth')
+const smoothToggle = document.getElementById('smooth')
 const resetElement = document.getElementById('reset')
-const fullResSwitch = document.getElementById('fullres')
-canvasElement.addEventListener('mousedown', onMouseDown)
-canvasElement.addEventListener('mousemove', onMouseMove)
-canvasElement.addEventListener('mouseup', onMouseUp)
-
-canvasElement.addEventListener('DOMMouseScroll', handleScroll, false)
-canvasElement.addEventListener('mousewheel', handleScroll, false)
+const fullResToggle = document.getElementById('fullres')
+const gpuToggle = document.getElementById('gpu')
 
 let lastTouchDistance = null
 let lastTouchCenter = null
-canvasElement.addEventListener('touchstart', (evt) => {
-    if (evt.touches.length === 1) {
-        onMouseDown(evt)
-    }
-    if (evt.touches.length === 2) {
-        lastTouchDistance = Math.hypot(evt.touches[0].pageX - evt.touches[1].pageX, evt.touches[0].pageY - evt.touches[1].pageY)
-        lastTouchCenter = [(evt.touches[0].pageX + evt.touches[1].pageX) / 2, (evt.touches[0].pageY + evt.touches[1].pageY) / 2]
-    }
-    evt.preventDefault()
-})
-canvasElement.addEventListener('touchmove', (evt) => {
-    if (evt.touches.length === 1) {
-        onMouseMove(evt)
-        if (document.fullscreenElement != null) {
-            // no preventDefault in full-screen mode because this may be used to exit full-screen
+
+function initListeners() {
+    addEventListener("fullscreenchange", (event) => {
+        if (document.fullscreenElement) {
+            for (let element of ELEMENTS_WITH_FS_CLASS) {
+                document.getElementById(element).classList.add('fullscreen')
+            }
+            document.documentElement.setAttribute('data-bs-theme', 'dark')
+            // hide menu-toggle and menu
+            document.getElementById('menu-toggle').classList.add('hidden')
+            document.getElementById('settings').classList.add('hidden')
+
+        } else {
+            for (let element of ELEMENTS_WITH_FS_CLASS) {
+                document.getElementById(element).classList.remove('fullscreen')
+            }
+            document.documentElement.setAttribute('data-bs-theme', 'light')
+        }
+    });
+
+    new ResizeObserver(onResize).observe(canvasElement)
+
+    canvasElement.addEventListener('mousedown', onMouseDown)
+    canvasElement.addEventListener('mousemove', onMouseMove)
+    canvasElement.addEventListener('mouseup', onMouseUp)
+
+    canvasElement.addEventListener('DOMMouseScroll', handleScroll, false)
+    canvasElement.addEventListener('mousewheel', handleScroll, false)
+
+    canvasElement.addEventListener('touchstart', (evt) => {
+        if (evt.touches.length === 1) {
+            onMouseDown(evt)
+        }
+        if (evt.touches.length === 2) {
+            lastTouchDistance = Math.hypot(evt.touches[0].pageX - evt.touches[1].pageX, evt.touches[0].pageY - evt.touches[1].pageY)
+            lastTouchCenter = [(evt.touches[0].pageX + evt.touches[1].pageX) / 2, (evt.touches[0].pageY + evt.touches[1].pageY) / 2]
+        }
+        evt.preventDefault()
+    })
+    canvasElement.addEventListener('touchmove', (evt) => {
+        if (evt.touches.length === 1) {
+            onMouseMove(evt)
+            if (document.fullscreenElement != null) {
+                // no preventDefault in full-screen mode because this may be used to exit full-screen
+                evt.preventDefault()
+            }
+        }
+        if (evt.touches.length === 2) {
+            const newTouchDistance = Math.hypot(evt.touches[0].pageX - evt.touches[1].pageX, evt.touches[0].pageY - evt.touches[1].pageY)
+            const newTouchCenter = [(evt.touches[0].pageX + evt.touches[1].pageX) / 2, (evt.touches[0].pageY + evt.touches[1].pageY) / 2]
+            const factor = newTouchDistance / lastTouchDistance;
+
+            [lastX, lastY] = toGraphicsCoordinates(newTouchCenter[0] - canvasElement.offsetLeft, newTouchCenter[1] - canvasElement.offsetTop)
+            const [newX, newY] = toGraphicsCoordinates(lastTouchCenter[0] - canvasElement.offsetLeft, lastTouchCenter[1] - canvasElement.offsetTop)
+
+            // Pan the canvas based on the movement of the center of the two fingers
+            const ptr = fractal.canvas2complex(lastX, lastY)
+            const startPtr = fractal.canvas2complex(newX, newY)
+            fractal.center = [fractal.center[0].add(startPtr[0].subtract(ptr[0])), fractal.center[1].add(startPtr[1].subtract(ptr[1]))]
+            panCanvas(lastX - newX, lastY - newY)
+
+            zoomWithFactor(factor, 0)
+            lastTouchDistance = newTouchDistance
+            lastTouchCenter = newTouchCenter
             evt.preventDefault()
         }
-    }
-    if (evt.touches.length === 2) {
-        const newTouchDistance = Math.hypot(evt.touches[0].pageX - evt.touches[1].pageX, evt.touches[0].pageY - evt.touches[1].pageY)
-        const newTouchCenter = [(evt.touches[0].pageX + evt.touches[1].pageX) / 2, (evt.touches[0].pageY + evt.touches[1].pageY) / 2]
-        const factor = newTouchDistance / lastTouchDistance;
+    })
+    canvasElement.addEventListener('touchend', (evt) => {
+        onMouseUp(evt)
+        lastTouchDistance = null
+        lastTouchCenter = null
+        // evt.preventDefault()
+    })
 
-        [lastX, lastY] = toGraphicsCoordinates(newTouchCenter[0] - canvasElement.offsetLeft, newTouchCenter[1] - canvasElement.offsetTop)
-        const [newX, newY] = toGraphicsCoordinates(lastTouchCenter[0] - canvasElement.offsetLeft, lastTouchCenter[1] - canvasElement.offsetTop)
+    iterationsElement.addEventListener('change', (event) => {
+        setIterations(parseInt(event.target.value))
+    })
+    iterationsElement.addEventListener('keydown', (event) => {
+        event.stopPropagation()
+    })
+    smoothToggle.addEventListener('change', (event) => {
+        fractal.smooth = event.target.checked
+        redraw()
+    })
+    gpuToggle.addEventListener('change', (event) => {
+        fractal.useGpu = event.target.checked
+        redraw()
+    })
+    fullScreenButton.addEventListener('click', (event) => {
+        toggleFullScreen()
+    })
+    fullResToggle.addEventListener('change', (event) => {
+        resizeToCanvasSize()
+        redraw()
+    })
 
-        // Pan the canvas based on the movement of the center of the two fingers
-        const ptr = fractal.canvas2complex(lastX, lastY)
-        const startPtr = fractal.canvas2complex(newX, newY)
-        fractal.center = [fractal.center[0].add(startPtr[0].subtract(ptr[0])), fractal.center[1].add(startPtr[1].subtract(ptr[1]))]
-        panCanvas(lastX - newX, lastY - newY)
+    resetElement.addEventListener('click', (event) => {
+        reset();
+    })
+    document.getElementById("lucky-button").addEventListener('click', (event) => {
+        iFeelLucky();
+    })
+    appElement.addEventListener('keydown', (event) => {
+        if (event.key === 'r') {
+            // console.log('redraw')
+            redraw(true)
+        }
+        if (event.key === 'Backspace') {
+            reset()
+        }
 
-        zoomWithFactor(factor, 0)
-        lastTouchDistance = newTouchDistance
-        lastTouchCenter = newTouchCenter
-        evt.preventDefault()
-    }
-})
-canvasElement.addEventListener('touchend', (evt) => {
-    onMouseUp(evt)
-    lastTouchDistance = null
-    lastTouchCenter = null
-    // evt.preventDefault()
-})
-
-iterationsElement.addEventListener('change', (event) => {
-    setIterations(parseInt(event.target.value))
-})
-iterationsElement.addEventListener('keydown', (event) => {
-    event.stopPropagation()
-})
-smoothElement.addEventListener('change', (event) => {
-    fractal.smooth = event.target.checked
-    redraw()
-})
-fullScreenButton.addEventListener('click', (event) => {
-    toggleFullScreen()
-})
-fullResSwitch.addEventListener('change', (event) => {
-    resizeToCanvasSize()
-    redraw()
-})
+        if (event.key === '+' || event.key === '=') {
+            updateIterations(100)
+        }
+        if (event.key === '-') {
+            updateIterations(-100)
+        }
+        if (event.key === 's') {
+            fractal.smooth = !fractal.smooth
+            smoothToggle.checked = fractal.smooth
+            redraw()
+        }
+        if (event.key === 'f') {
+            toggleFullScreen()
+        }
+    })
+}
 
 function reset() {
     fractal.setZoom(fxp.fromNumber(1))
@@ -863,37 +982,6 @@ function iFeelLucky() {
     fractal.initPallete()
     redraw()
 }
-
-resetElement.addEventListener('click', (event) => {
-    reset();
-})
-document.getElementById("lucky-button").addEventListener('click', (event) => {
-    iFeelLucky();
-})
-appElement.addEventListener('keydown', (event) => {
-    if (event.key === 'r') {
-        // console.log('redraw')
-        redraw(true)
-    }
-    if (event.key === 'Backspace') {
-        reset()
-    }
-
-    if (event.key === '+' || event.key === '=') {
-        updateIterations(100)
-    }
-    if (event.key === '-') {
-        updateIterations(-100)
-    }
-    if (event.key === 's') {
-        fractal.smooth = !fractal.smooth
-        smoothElement.checked = fractal.smooth
-        redraw()
-    }
-    if (event.key === 'f') {
-        toggleFullScreen()
-    }
-})
 
 function updatePermalink() {
     const url = new URL(window.location)
@@ -930,8 +1018,9 @@ function init() {
     // resizeTmpCanvas()
     onResize()
     iterationsElement.value = fractal.max_iter
-    smoothElement.checked = fractal.smooth
+    smoothToggle.checked = fractal.smooth
     fractal.initPallete()
+    initListeners()
     redraw()
 }
 
@@ -948,7 +1037,7 @@ function initFromParams(params) {
         // paletteComponent.setExp(p.palette.exp)
     }
     iterationsElement.value = fractal.max_iter
-    smoothElement.checked = fractal.smooth
+    smoothToggle.checked = fractal.smooth
 }
 
 window.onload = init

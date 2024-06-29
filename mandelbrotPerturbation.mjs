@@ -12,7 +12,7 @@ export class MandelbrotPerturbation {
         this.referencePoints = []
     }
 
-    process(task){
+    async process(task){
         this.max_iter = task.maxIter
         const w = task.w
         const h = task.h

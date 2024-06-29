@@ -58,10 +58,9 @@ export class WorkerContext {
 
 // Inserts the smooth value in the smooth buffer if any and returns the (potentially updated) iter value
 export function smoothen(smooth, offset, iter, zq) {
-    let nu = 1
     if (smooth && iter > 3) {
         let log_zn = Math.log(zq) / 2
-        nu = Math.log(log_zn / Math.log(2)) / Math.log(2)
+        let nu = Math.log(log_zn / Math.log(2)) / Math.log(2)
         iter = Math.floor(iter + 1 - nu)
         nu = nu - Math.floor(nu)
         smooth[offset] = Math.floor(255 - 255 * nu)

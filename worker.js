@@ -4,6 +4,7 @@ import {MandelbrotFloat} from "./mandelbrotFloat.mjs";
 import {MandelbrotFxP} from "./mandelbrotFxP.mjs";
 import {MandelbrotPerturbation} from "./mandelbrotPerturbation.mjs";
 import {MandelbrotPerturbationExtFloat} from "./mandelbrotPerturbationExtFloat.mjs";
+import {MandelbrotWebGPU} from "./mandelbrotWebGPU.mjs";
 
 const ctx = new WorkerContext()
 
@@ -48,7 +49,6 @@ async function handleMessage(msg) {
                 : message.requiredPrecision > 58
                     ? mandelbrotPerturbation
                     : mandelbrotFloat
-        // const implPromise = mandelbrotFxP
 
         const impl = await implPromise
         // console.log(`Precision ${message.requiredPrecision}, using ${impl.constructor.name}`)
@@ -56,7 +56,7 @@ async function handleMessage(msg) {
 
         ctx.initTask(message.jobToken)
         ctx.resetStats()
-        const result = impl.process(message)
+        const result = await impl.process(message)
         postMessage(result)
     }
 }

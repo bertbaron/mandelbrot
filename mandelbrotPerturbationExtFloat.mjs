@@ -47,7 +47,7 @@ export class MandelbrotPerturbationExtFloat {
         }
     }
 
-    calculate(values, smooth, w, h, skipTopLeft, task) {
+    async calculate(values, smooth, w, h, skipTopLeft, task) {
         const stats = this.ctx.stats
         const scale = task.precision
         const bigScale = BigInt(scale)
@@ -175,6 +175,10 @@ export class MandelbrotPerturbationExtFloat {
      * @returns {[number, number]} [iter, zq]
      */
     mandlebrot_perturbation(dExp, dcr, dci, max_iter, bailout, zs) {
+        const exponents = []
+        const guessedExponents = []
+        exponents.push(Math.max(realExp(dcr, dExp), realExp(dci, dExp)))
+        guessedExponents.push(dExp)
 
         // ε₀ = δ
         let ezr = dcr
@@ -198,6 +202,9 @@ export class MandelbrotPerturbationExtFloat {
             ezi *= eExpDeltaFactor
             dcr *= eExpDeltaFactor
             dci *= eExpDeltaFactor
+            const eExp = _zsvalues[5]
+            exponents.push(Math.max(realExp(ezr, eExp), realExp(ezi, eExp)))
+            guessedExponents.push(eExp)
 
             const zr = _zsvalues[0]
             const zi = _zsvalues[1]
@@ -219,6 +226,10 @@ export class MandelbrotPerturbationExtFloat {
             ezr = _ezr + dcr
             ezi = _ezi + dci
         }
+        if (this.debug) {
+            console.log(exponents.join(","))
+            console.log(guessedExponents.join(","))
+        }
         return [iter + 4, zzq]
     }
 
@@ -230,7 +241,7 @@ export class MandelbrotPerturbationExtFloat {
      * @param {BigInt} bigScale
      * @param {number} scale
      * @param {number} bailout
-     * @returns {[[number, number], number, number, [number, number, number, number, number][]]} ((rr, ri), iter, zq, (zr, zi, zqErrorBound, zExpFactor, zEzpDeltaFactor)[])
+     * @returns {[[number, number], number, number, [number, number, number, number, number][]]} ((rr, ri), iter, zq, (zr, zi, zqErrorBound, eExpFactor, eEzpDeltaFactor)[])
      */
     calculate_reference(refr, refi, dr, di, bigScale, scale, bailout) {
         const start = performance.now()
@@ -241,11 +252,13 @@ export class MandelbrotPerturbationExtFloat {
 
         const iterations = seq.length
         const zs = seq.map(([zr, zi, zq], idx) => {
-            const eExp = Math.round((idx / iterations) * scale - scale)
+            // No mathematical proof whatsoever! It may be impossible to 'predict' the exponent of epsilon good enough,
+            // if it drifts more than approx. 1000 from the actual exp of the error, the results may become incorrect
+            const eExp = Math.round(Math.pow(idx / iterations, 1.75) * scale - scale)
             const eExpDeltaFactor = 2 ** (lastExp-eExp)
             const eExpFactor = 2 ** eExp
             lastExp = eExp
-            return [zr, zi, zq, eExpFactor, eExpDeltaFactor]
+            return [zr, zi, zq, eExpFactor, eExpDeltaFactor, eExp]
         })
         const end = performance.now()
         this.ctx.stats.timeSpendInHighPrecision += end - start
@@ -291,4 +304,21 @@ export class MandelbrotPerturbationExtFloat {
         seq.push([z_real, z_imag, z_real * z_real + z_imag * z_imag])
         return [iter + 4, zq, seq]
     }
+}
+
+const realExpBuffer = new Float64Array(1)
+const realExpData = new DataView(realExpBuffer.buffer)
+
+export function realExp(value, xExp) {
+    realExpBuffer[0] = value
+    let bits = realExpData.getUint32(4, true)
+    return ((bits & 0x7FF00000) >> 20) - 1023 + xExp
+}
+
+function binary(value, bits) {
+    let result = ''
+    for (let i = bits - 1; i >= 0; i--) {
+        result += (value & (1 << i)) ? '1' : '0'
+    }
+    return result
 }

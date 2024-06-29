@@ -31,4 +31,23 @@ function perfTest() {
     console.log(result.stats)
 }
 
-perfTest()
+function testje() {
+    const ctx = new WorkerContext()
+    const mandelbrot = new m.MandelbrotPerturbationExtFloat(ctx)
+    const task = tasks.parse(tasks.I50000)
+    task.resetCaches = true
+    task.w = 80
+    task.h = 60
+
+    // calculates reference points
+    calculate(mandelbrot, task, [0, 0], [80, 60])
+
+
+    // now we take a sample
+    mandelbrot.debug = true
+    // calculate(mandelbrot, task, [79, 59], [1, 1])
+    calculate(mandelbrot, task, [40, 20], [1, 1])
+}
+
+// perfTest()
+testje()
