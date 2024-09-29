@@ -37,6 +37,7 @@
         <canvas id="progress-canvas" width="20" height="20"></canvas>
         <button id="menu-toggle"></button>
         <textarea id="debug" readonly hidden></textarea>
+        <label for="debug" hidden>Debug</label>
         <canvas id="palette-canvas" hidden></canvas>
     </div>
     <div id="settings">
@@ -49,18 +50,18 @@
                 </div>
             </div>
             <div class="mb-2 g-1 row">
-                <div class="col col-sm-6 form-check form-switch">
-                    <input id="smooth" class="form-check-input" title="Smooth coloring" type="checkbox" role="switch"/>
-                    <label for="smooth" class="form-check-labels">Smooth</label>
+                <div class="col col-sm-6 form-check form-switch" data-bs-toggle="tooltip" data-bs-placement="left" title="Smooth coloring">
+                    <input id="smooth" class="form-check-input" type="checkbox" role="switch"/>
+                    <label for="smooth" class="form-check-label">Smooth</label>
                 </div>
-                <div class="col col-sm-6 form-check form-switch">
-                    <input id="fullres" class="form-check-input" title="Use physical pixels if different from display-pixels" type="checkbox" role="switch"/>
+                <div class="col col-sm-6 form-check form-switch" data-bs-toggle="tooltip" data-bs-placement="left" title="Use physical pixels if different from display-pixels">
+                    <input id="fullres" class="form-check-input" type="checkbox" role="switch"/>
                     <label for="fullres" class="form-check-labels">Hi DPI</label>
                 </div>
             </div>
             <div class="mb-2 g-1 row">
-                <div class="col col-sm-6 form-check form-switch">
-                    <input id="gpu" class="form-check-input" title="Use WebGPU, experimental" type="checkbox" role="switch"/>
+                <div class="col col-sm-6 form-check form-switch" data-bs-toggle="tooltip" data-bs-placement="left" title="Use WebGPU, experimental">
+                    <input id="gpu" class="form-check-input"  type="checkbox" role="switch"/>
                     <label for="gpu" class="form-check-labels">GPU (exp.)</label>
                 </div>
             </div>
@@ -159,5 +160,6 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
             integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
             crossorigin="anonymous"></script>
+</div>
 </body>
 </html>

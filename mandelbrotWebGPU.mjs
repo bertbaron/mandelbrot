@@ -7,9 +7,10 @@ export class MandelbrotWebGPU {
     /**
      * @param {WorkerContext} ctx
      */
-    constructor(p, ctx) {
+    constructor(p, ctx, errorCallback) {
         this.p = p
         this.ctx = ctx
+        this.errorCallback = errorCallback
         this.paramHash = null
         this.jobId = null
         this.referencePoints = []
@@ -27,7 +28,8 @@ export class MandelbrotWebGPU {
         });
         const device = await adapter?.requestDevice();
         if (!device) {
-            fail('need a browser that supports WebGPU');
+            this.errorCallback('need a browser that supports WebGPU')
+            return
         }
 
         const info = await adapter?.requestAdapterInfo()

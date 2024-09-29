@@ -54,7 +54,7 @@ class Mandelbrot {
             this.workers.push(worker)
         }
 
-        this.mandelbrotGpu = new mgpu.MandelbrotWebGPU(this, new WorkerContext())
+        this.mandelbrotGpu = new mgpu.MandelbrotWebGPU(this, new WorkerContext(), error => this.gpuErrorCallback(error))
 
         this.zoom = fxp.fromNumber(1)
         this.center = [fxp.fromNumber(-0.5), fxp.fromNumber(0)]
@@ -77,6 +77,16 @@ class Mandelbrot {
 
         this.resized()
         this.resetStats()
+    }
+
+    gpuErrorCallback(message) {
+        console.log(`GPU error: ${message}`)
+        this.useGpu = false
+        gpuToggle.checked = false
+        gpuToggle.disabled = true
+        gpuToggle.parentElement.setAttribute('title', 'WebGPU not supported');
+        new bootstrap.Tooltip(gpuToggle.parentElement);
+        redraw()
     }
 
     resetStats() {
@@ -834,6 +844,10 @@ const smoothToggle = document.getElementById('smooth')
 const resetElement = document.getElementById('reset')
 const fullResToggle = document.getElementById('fullres')
 const gpuToggle = document.getElementById('gpu')
+//const gpuLabel = document.querySelector('label[for="gpu"]');
+// parent element of the gpuToggle
+//const gpuParent = gpuToggle.parentElement
+
 
 let lastTouchDistance = null
 let lastTouchCenter = null
@@ -855,6 +869,10 @@ function initListeners() {
             }
             document.documentElement.setAttribute('data-bs-theme', 'light')
         }
+    });
+
+    const tooltipList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]')).map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
     });
 
     new ResizeObserver(onResize).observe(canvasElement)
