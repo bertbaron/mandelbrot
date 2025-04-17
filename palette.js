@@ -108,6 +108,8 @@ class IndexedPalette {
     }
 }
 
+const ORIGINAL = new OriginalPalette()
+
 // Similar to that of Ultra Fractal, although these colors are equaly spaced
 const MANDELBROT = new IndexedPalette("mandelbrot", "Mandelbrot", [
     [0, 7, 100],
@@ -199,7 +201,7 @@ const JEWELLERY = new IndexedPalette("jewellery", "Jewellery", [
 ], false)
 
 export const PALETTES = [
-    new OriginalPalette(),
+    ORIGINAL,
     MANDELBROT,
     LAVA,
     FALL,
