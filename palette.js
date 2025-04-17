@@ -1,3 +1,6 @@
+/**
+ * @author Bert Baron
+ */
 export function getPalette(id) {
     const palette = PALETTES.find(p => p.id === id)
     if (palette) return palette

@@ -1,3 +1,6 @@
+/**
+ * @author Bert Baron
+ */
 import {mandelbrot_high_precision} from "./sharedCalculations.mjs";
 
 /**

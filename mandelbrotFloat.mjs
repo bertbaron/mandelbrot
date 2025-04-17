@@ -1,3 +1,6 @@
+/**
+ * @author Bert Baron
+ */
 import {WorkerContext} from "./workerContext.mjs";
 
 /**

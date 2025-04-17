@@ -1,3 +1,6 @@
+/**
+ * @author Bert Baron
+ */
 import {smoothen, WorkerContext} from "./workerContext.mjs";
 
 /**

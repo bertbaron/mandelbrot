@@ -1,4 +1,6 @@
-import * as fxp from "./fxp.mjs";
+/**
+ * @author Bert Baron
+ */
 import {WorkerContext, smoothen} from "./workerContext.mjs";
 
 export class MandelbrotPerturbation {

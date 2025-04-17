@@ -1,6 +1,8 @@
 /*
  * Simple library for calculations with fixed-point numbers. Each number has a scale in the number of bits.
  * Calculations are done with the same scale, and the result has the same scale. Mixing scales is not supported.
+ *
+ * @author Bert Baron
  */
 
 // const FP_BITS = 32

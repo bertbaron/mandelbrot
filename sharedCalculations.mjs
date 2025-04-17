@@ -1,3 +1,6 @@
+/**
+ * @author Bert Baron
+ */
 import * as fxp from "./fxp.mjs";
 
 /**

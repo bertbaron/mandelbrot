@@ -1,3 +1,6 @@
+/**
+ * @author Bert Baron
+ */
 // Add some randomnes to have different checkpoints per worker
 const STOP_CHECK_INTERVAL = 200 + Math.floor(Math.random() * 100)
 

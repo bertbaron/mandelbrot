@@ -1,3 +1,6 @@
+/**
+ * @author Bert Baron
+ */
 import * as fxp from "./fxp.mjs";
 import {smoothen, WorkerContext} from "./workerContext.mjs";
 
@@ -646,6 +649,14 @@ class MandelbrotPipeline {
             @group(0) @binding(5) var<storage, read_write> smoothBuffer: array<u32>;
 //            @group(0) @binding(7) var<storage, read_write> debugBuffer: array<f32>;
             
+            /**
+             * This is the authors own code. In particular, the idea to use an implicit
+             * extended exponent to overcome the limit of float32 is the authors own.             
+             * Feel free to use or adapt this code in your own projects.
+             * If you do, I would greatly appreciate it if you could reference the original source.
+             * Thank you!
+             */ 
+
             @compute @workgroup_size(${workgroupSize}) fn computeSomething(
               @builtin(global_invocation_id) id: vec3u
             ) {

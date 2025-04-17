@@ -36,12 +36,12 @@ For each rendering pass, the image is broken into small parts which are then cac
 The reference points are calculated using fixed-point arithmetic, which is implemented using BigInt. The size of BigInt numbers is determined by the zoom level, zo it increases while zooming in.
 
 **Extended Float**
-The use of extended float was an idea of myself, though I'm likeley not the first with the idea. In short and simplified, the Perturbation is based on adding a very small number δ to a much bigger number ε. At deep zoomlevels, δ becomes so small that it can not be represented anymore with a float64 (the exponent will become smaller than -1023). The precision is still more than enough though. By using an additional exponent, calculations can be done much further. The exponent doesn't need to be stored with each number. All the 'small' numbers in the loop implicitly share the same extra exponent, which is adjusted along the way. 
+The use of extended float was an idea of myself, though I'm likely not the first with the idea. In short and simplified, the Perturbation is based on adding a very small number δ to a much bigger number ε. At deep zoomlevels, δ becomes so small that it can not be represented anymore with a float64 (the exponent will become smaller than -1023). The precision is still more than enough though. By using an additional exponent, calculations can be done much further. The exponent doesn't need to be stored with each number. All the 'small' numbers in the loop implicitly share the same extra exponent, which is adjusted along the way. 
 
 ### WebGPU
 
 The WebGPU implementation only uses the 'perturbation with extended float' algorithm. For smaller zoom levels this will not be as fast as one might expect, but at deeper zoomlevels because it is (currently) not optimized for those, but at deeper zoomlevels the performance difference is significant. 
 
-The implementation uses float32 numbers, but with the extended exponent it is possible to zoom as deep as 1E1500 (still within seconds!), before artifacts become visible. Unfortunately WebGPU does not support float64 yet, so to take it even further I might need try to use [Double-Double arithmetic](https://en.wikipedia.org/wiki/Quadruple-precision_floating-point_format)
+The implementation uses float32 numbers, but with the extended exponent it is possible to zoom as deep as 1E1500 (still within seconds!), before artifacts become visible. Unfortunately WebGPU does not support float64 yet, so to take it even further I might need to try to use [Double-Double arithmetic](https://en.wikipedia.org/wiki/Quadruple-precision_floating-point_format)
 
 The reference points are still calculated using BigInt in javascript. These will be moved to webworkers to run as much as possible in parallel with the WebGPU calculations without blocking the main thread, but this is not implemented yet.
