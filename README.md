@@ -40,8 +40,11 @@ The use of extended float was an idea of myself, though I'm likely not the first
 
 ### WebGPU
 
-The WebGPU implementation only uses the 'perturbation with extended float' algorithm. For smaller zoom levels this will not be as fast as one might expect, but at deeper zoomlevels because it is (currently) not optimized for those, but at deeper zoomlevels the performance difference is significant. 
+Using the GPU might result in much faster rendering. Note that the calculations on the GPU might contend with the pan and zoom animations resulting in a less smooth experience on smaller devices such as mobile phones. 
 
-The implementation uses float32 numbers, but with the extended exponent it is possible to zoom as deep as 1E1500 (still within seconds!), before artifacts become visible. Unfortunately WebGPU does not support float64 yet, so to take it even further I might need to try to use [Double-Double arithmetic](https://en.wikipedia.org/wiki/Quadruple-precision_floating-point_format)
+**Algorithm**
+The WebGPU implementation only uses the 'perturbation with extended float' algorithm. For smaller zoom levels this might not be as fast as one might expect because it is not optimized for those, but at deeper zoomlevels the performance difference can become significant. 
 
-The reference points are still calculated using BigInt in javascript. These will be moved to webworkers to run as much as possible in parallel with the WebGPU calculations without blocking the main thread, but this is not implemented yet.
+The implementation uses float32 numbers, but with the extended exponent it is possible to zoom as deep as 1E1500 (still within seconds!), before artifacts become visible. Unfortunately WebGPU does not support float64 yet. To take it even further [Double-Double arithmetic](https://en.wikipedia.org/wiki/Quadruple-precision_floating-point_format) might be an option, but this is not implemented yet.
+
+The reference points are still calculated using BigInt in javascript. These will be moved to webworkers to run as much as possible in parallel with the WebGPU calculations and without blocking the main thread, but this is not implemented yet.
