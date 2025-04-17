@@ -32,8 +32,12 @@ export class MandelbrotWebGPU {
             return
         }
 
-        const info = await adapter?.requestAdapterInfo()
-        console.log(`GPU Adapter: ${info.vendor}:${info.architecture}:${info.device} ${info.description}`)
+        try {
+            const info = await device?.adapterInfo
+            console.log(`GPU Adapter: ${info.vendor}:${info.architecture}:${info.device} ${info.description}`)
+        } catch (error) {
+            console.log(`Failed to get adapter info: ${error}`)
+        }
 
         device.lost.then(() => {
             console.log('GPU lost, reloading');
