@@ -1,17 +1,25 @@
 # mandelbrot
+
 Online Mandelbrot Explorer
 
 Requires a modern browser with support for BigInt and Web Workers.
 
 A live version can be found here: https://bertbaron.github.io/mandelbrot/
 
-## Implementation
+## Table of Contents
+
+- [mandelbrot](#mandelbrot)
+  - [Background](#background)
+  - [Javascript implementation](#javascript-implementation)
+  - [WebGPU implementation](#webgpu-implementation)
+
+## Background
 
 I actually started this to play with Web Assembly but soon figured out that javascript on modern browsers is quite fast and hard to outperform with Web Assembly. Since the algorithm matters more than the language, I decided to start with a javascript implementation. I might move parts to Web Assembly later once I have a nice reference implementation in javascript.
 
 There is currently a pure javascript implementation and an experimental WebGPU implementation.
 
-### Javascript
+## Javascript implementation
 
 The javascript implementation uses different algorithms depending on the zoom level¹
 
@@ -38,7 +46,7 @@ The reference points are calculated using fixed-point arithmetic, which is imple
 **Extended Float**
 The use of extended float was an idea of myself, though I'm likely not the first with the idea. In short and simplified, the Perturbation is based on adding a very small number δ to a much bigger number ε. At deep zoomlevels, δ becomes so small that it can not be represented anymore with a float64 (the exponent will become smaller than -1023). The precision is still more than enough though. By using an additional exponent, calculations can be done much further. The exponent doesn't need to be stored with each number. All the 'small' numbers in the loop implicitly share the same extra exponent, which is adjusted along the way. 
 
-### WebGPU
+## WebGPU implementation
 
 Using the GPU might result in much faster rendering. Note that the calculations on the GPU might contend with the pan and zoom animations resulting in a less smooth experience on smaller devices such as mobile phones. 
 
