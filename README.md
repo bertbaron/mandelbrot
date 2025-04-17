@@ -8,10 +8,9 @@ A live version can be found here: https://bertbaron.github.io/mandelbrot/
 
 ## Table of Contents
 
-- [mandelbrot](#mandelbrot)
-  - [Background](#background)
-  - [Javascript implementation](#javascript-implementation)
-  - [WebGPU implementation](#webgpu-implementation)
+- [Background](#background)
+- [Javascript implementation](#javascript-implementation)
+- [WebGPU implementation](#webgpu-implementation)
 
 ## Background
 
