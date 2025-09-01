@@ -40,7 +40,7 @@ For each rendering pass, the image is broken into small parts which are then cac
 
 **Fixed Point reference points**
 
-The reference points are calculated using fixed-point arithmetic, which is implemented using BigInt. The size of BigInt numbers is determined by the zoom level, zo it increases while zooming in.
+The reference points are calculated using fixed-point arithmetic, which is implemented using BigInt. The size of BigInt numbers is determined by the zoom level, so it increases while zooming in.
 
 **Extended Float**
 The use of extended float was an idea of myself, though I'm likely not the first with the idea. In short and simplified, the Perturbation is based on adding a very small number δ to a much bigger number ε. At deep zoomlevels, δ becomes so small that it can not be represented anymore with a float64 (the exponent will become smaller than -1023). The precision is still more than enough though. By using an additional exponent, calculations can be done much further. The exponent doesn't need to be stored with each number. All the 'small' numbers in the loop implicitly share the same extra exponent, which is adjusted along the way. 
