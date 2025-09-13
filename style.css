@@ -42,7 +42,8 @@ body {
     width: 30px;
     height: 30px;
     z-index: 3;
-    border-radius: 5px;
+    /*border-radius: 5px;*/
+    border: none;
     padding: 5px;
     cursor: pointer;
     background-color: rgba(0, 0, 0, 0.5);
