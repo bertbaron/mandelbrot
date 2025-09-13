@@ -862,9 +862,10 @@ function initListeners() {
                 document.getElementById(element).classList.add('fullscreen')
             }
             document.documentElement.setAttribute('data-bs-theme', 'dark')
-            // hide menu-toggle and menu
-            document.getElementById('menu-toggle').classList.add('hidden')
-            document.getElementById('settings').classList.add('hidden')
+            // Don't auto-hide the menu in full-screen mode for now because users may not be aware
+            // of the hidden menu toggle button
+            // document.getElementById('menu-toggle').classList.add('hidden')
+            // document.getElementById('settings').classList.add('hidden')
 
         } else {
             for (let element of ELEMENTS_WITH_FS_CLASS) {
