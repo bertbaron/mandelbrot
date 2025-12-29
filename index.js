@@ -567,11 +567,30 @@ class PaletteComponent {
             const anchor = document.createElement("a");
             anchor.classList.add("dropdown-item");
             anchor.href = "#";
-            anchor.textContent = p.name;
             anchor.dataset.paletteId = p.id
             if (p.id === this.palette.id) {
                 anchor.classList.add("active")
             }
+
+            // Palette preview canvas
+            const preview = document.createElement("canvas");
+            preview.width = 40;
+            preview.height = 12;
+            preview.style.verticalAlign = "middle";
+            preview.style.marginRight = "8px";
+            const ctx = preview.getContext("2d");
+            for (let x = 0; x < preview.width; x++) {
+                let color = p.getColor(x / preview.width * 100, 0);
+                ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
+                ctx.fillRect(x, 0, 1, preview.height);
+            }
+
+            anchor.appendChild(preview);
+            // Palette name
+            const nameSpan = document.createElement("span");
+            nameSpan.textContent = p.name;
+            anchor.appendChild(nameSpan);
+
             anchor.addEventListener("click", () => {
                 this.setPalette(palette.getPalette(p.id))
                 this.notifyListeners()
