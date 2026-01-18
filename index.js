@@ -44,7 +44,7 @@ class MyWorker {
 }
 
 class Mandelbrot {
-    constructor(canvas, progress, paletteComponent) {
+    constructor(canvas, progress, paletteSelector) {
         this.canvas = canvas
         this.progress = progress
         this.taskqueue = []
@@ -66,9 +66,9 @@ class Mandelbrot {
         this.useGpu = false
 
         this.palette = []
-        this.paletteComponent = paletteComponent
+        this.paletteSelector = paletteSelector
         this.initPallete(false)
-        this.paletteComponent.addListener(() => {
+        this.paletteSelector.addListener(() => {
             this.initPallete(true)
         })
 
@@ -139,7 +139,7 @@ class Mandelbrot {
     }
 
     initPallete(redraw) {
-        this.palette = palette.initPallet(this.paletteComponent.palette, this.paletteComponent.density, this.paletteComponent.rotate, this.paletteComponent.exp, this.max_iter)
+        this.palette = palette.initPallet(this.paletteSelector.palette, this.paletteSelector.density, this.paletteSelector.rotate, this.paletteSelector.exp, this.max_iter)
         renderPalette(this.palette)
         if (redraw) {
             const lastScreenNr = this.jobLevel < 1 ? this.offscreens.length : this.jobLevel - 1
@@ -170,7 +170,6 @@ class Mandelbrot {
         if (!this.permalinkUpdated && (this.jobLevel === this.offscreens.length || performance.now() > this.jobStartTime + 500)) {
             this.permalinkUpdated = true
             updatePermalink()
-            // console.log(`Required precision: ${this.requiredPrecision} bits (zoom=${this.zoom.toNumber().toExponential(2)})`)
         }
         if (this.jobLevel === 0) {
             let totalTasks = 0
@@ -549,25 +548,26 @@ const paletteCanvasElement = document.getElementById("palette-canvas")
 
 const tempCanvas = document.createElement('canvas');
 
-class PaletteComponent {
+class PaletteSelector {
     constructor() {
         this.listeners = []
         this.palette = palette.getPalette('original')
         this.density = 1
         this.rotate = 0
-        // this.exp = 0.9
     }
 
     init() {
         const paletteMenu = document.getElementById("palette-menu");
-
+        paletteMenu.innerHTML = "";
         // Populate the dropdown dynamically
-        palette.PALETTES.forEach(p => {
+        palette.palettes().forEach(p => {
             const listItem = document.createElement("li");
+            listItem.classList.add('d-flex', 'align-items-center');
             const anchor = document.createElement("a");
             anchor.classList.add("dropdown-item");
             anchor.href = "#";
             anchor.dataset.paletteId = p.id
+            anchor.classList.add('flex-grow-1', 'd-flex', 'align-items-center');
             if (p.id === this.palette.id) {
                 anchor.classList.add("active")
             }
@@ -591,13 +591,70 @@ class PaletteComponent {
             nameSpan.textContent = p.name;
             anchor.appendChild(nameSpan);
 
+            // Action buttons (edit / delete) - placed as sibling to the anchor so we don't nest interactive elements
+            const actionsSpan = document.createElement('span');
+            actionsSpan.className = 'palette-actions';
+            // Only show edit/delete for custom palettes
+            if (p.isCustom && p.isCustom()) {
+                const editBtn = document.createElement('button');
+                editBtn.type = 'button';
+                editBtn.className = 'palette-action palette-edit';
+                editBtn.title = 'Edit palette';
+                editBtn.setAttribute('aria-label', 'Edit palette');
+                editBtn.textContent = '✎';
+                editBtn.dataset.paletteId = p.id;
+                editBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    customPaletteComponent.editingId = p.id;
+                    this.setPalette(palette.getPalette(p.id));
+                    showCustomPaletteContainer();
+                });
+                actionsSpan.appendChild(editBtn);
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.type = 'button';
+                deleteBtn.className = 'palette-action palette-delete';
+                deleteBtn.title = 'Delete palette';
+                deleteBtn.setAttribute('aria-label', 'Delete palette');
+                deleteBtn.textContent = '🗑';
+                deleteBtn.dataset.paletteId = p.id;
+                deleteBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!confirm(`Delete palette "${p.name}"?`)) return;
+                    palette.deleteCustomPalette(p.id);
+                    // rebuild menu and pick a safe palette
+                    paletteSelector.init();
+                    // if the deleted palette was currently selected, pick the first available
+                    if (paletteSelector.palette && paletteSelector.palette.id === p.id) {
+                        const all = palette.palettes();
+                        paletteSelector.setPalette(all[0]);
+                    }
+                    this.notifyListeners()
+                });
+                actionsSpan.appendChild(deleteBtn);
+            }
+
             anchor.addEventListener("click", () => {
                 this.setPalette(palette.getPalette(p.id))
                 this.notifyListeners()
             });
             listItem.appendChild(anchor);
+            listItem.appendChild(actionsSpan);
             paletteMenu.appendChild(listItem);
         });
+        // Add custom palette option
+        const addCustomLi = document.createElement("li");
+        const addCustomAnchor = document.createElement("a");
+        addCustomAnchor.classList.add("dropdown-item");
+        addCustomAnchor.href = "#";
+        addCustomAnchor.innerHTML = '<span style="font-weight:bold;">＋</span> Add custom palette';
+        addCustomAnchor.addEventListener("click", () => {
+            showCustomPaletteContainer();
+        });
+        addCustomLi.appendChild(addCustomAnchor);
+        paletteMenu.appendChild(addCustomLi);
 
         this.densitySlider = document.getElementById("palette-density");
         this.densitySlider.addEventListener("input", () => {
@@ -612,7 +669,7 @@ class PaletteComponent {
 
     setPalette(palette) {
         this.palette = palette
-        const paletteMenu = document.getElementById("palette-menu");
+        const paletteMenu = document.getElementById("palette-menu")
         for (let child of paletteMenu.children) {
             const anchor = child.children[0]
             if (anchor.dataset.paletteId === palette.id) {
@@ -623,6 +680,21 @@ class PaletteComponent {
         }
         // set the palette name as the button text
         document.getElementById("palette-dropdown").innerText = palette.name
+    }
+
+    setEmbeddedPalette(colors, mirror) {
+        let paletteObject = palette.createPaletteFromColors('embedded', '<embedded>', colors, mirror)
+        // loop trough all palettes. If there is a custom palette with the same colors, use that one instead
+        for (let p of palette.palettes()) {
+            if (p.isSamePalette(paletteObject)) {
+                paletteObject = p
+            }
+        }
+        this.setPalette(paletteObject)
+    }
+
+    setAnonymousPalette(palette) {
+        this.palette = palette
     }
 
     setDensity(density, skipControl) {
@@ -639,11 +711,6 @@ class PaletteComponent {
         this.notifyListeners()
     }
 
-    // setExp(exp) {
-    //     this.exp = exp
-    //     this.notifyListeners()
-    // }
-
     addListener(listener) {
         this.listeners.push(listener)
     }
@@ -655,9 +722,9 @@ class PaletteComponent {
     }
 }
 
-const paletteComponent = new PaletteComponent();
+const paletteSelector = new PaletteSelector();
 
-const fractal = new Mandelbrot(canvasElement, new ProgressMonitor(progressElement), paletteComponent)
+const fractal = new Mandelbrot(canvasElement, new ProgressMonitor(progressElement), paletteSelector)
 
 let redrawTimeout = null;
 
@@ -981,6 +1048,116 @@ function initListeners() {
         iFeelLucky();
     })
     appElement.addEventListener('keydown', (event) => {
+        activeComponent.onKeydown(event)
+    })
+}
+
+function reset() {
+    fractal.setZoom(fxp.fromNumber(1))
+    fractal.setCenter([fxp.fromNumber(-0.5), fxp.fromNumber(0)])
+    paletteSelector.setDensity(1)
+    paletteSelector.setRotate(0)
+    // paletteSelector.setExp(0.9)
+    if (!setIterations(DEFAULT_ITERATIONS)) {
+        redraw()
+    }
+}
+
+function iFeelLucky() {
+    const favorite = favorites.getRandomFavorite()
+    initFromParams(favorite)
+    fractal.initPallete()
+    redraw()
+}
+
+function updatePermalink() {
+    const url = new URL(window.location)
+    const p = url.searchParams
+    let palette = {
+        id: paletteSelector.palette.id,
+        density: paletteSelector.density,
+        rotate: paletteSelector.rotate,
+    }
+    if (paletteSelector.palette.isCustom()) {
+        palette.id = undefined
+        const exported = paletteSelector.palette.export()
+        palette.colors = exported.colors
+        palette.mirror = exported.mirror
+    }
+    const params = {
+        center: fractal.center,
+        zoom: fractal.zoom,
+        max_iter: fractal.max_iter,
+        smooth: fractal.smooth,
+        palette: palette
+    }
+    p.set('params', btoa(JSON.stringify(params)))
+
+    window.history.replaceState({}, '', url)
+}
+
+function initUI() {
+    paletteSelector.init();
+}
+
+// on load, check if there is a permalink in the url
+function init() {
+    initUI()
+    const url = new URL(window.location)
+    const params = url.searchParams.get('params')
+    if (params) {
+        initFromParams(params)
+    }
+    // resizeTmpCanvas()
+    onResize()
+    iterationsElement.value = fractal.max_iter
+    smoothToggle.checked = fractal.smooth
+    fractal.initPallete()
+    for (let component of components) {
+        component.init()
+    }
+    showSettingsContainer()
+    initListeners()
+    redraw()
+}
+
+function initFromParams(params) {
+    const p = JSON.parse(atob(params))
+    fractal.setZoom(fxp.fromJSON(p.zoom))
+    fractal.setCenter(p.center.map(fxp.fromJSON))
+    fractal.max_iter = p.max_iter
+    fractal.smooth = p.smooth
+    if (p.palette) {
+        if (p.palette.colors) {
+            paletteSelector.setEmbeddedPalette(p.palette.colors, p.palette.mirror)
+        } else {
+            paletteSelector.setPalette(palette.getPalette(p.palette.id))
+        }
+        paletteSelector.setDensity(p.palette.density)
+        paletteSelector.setRotate(p.palette.rotate)
+    }
+    iterationsElement.value = fractal.max_iter
+    smoothToggle.checked = fractal.smooth
+}
+
+class SettingsComponent {
+    constructor() {
+    }
+
+    init() {
+    }
+
+    show() {
+        const settingsContainer = document.getElementById('settings-container')
+        settingsContainer.hidden = false
+    }
+
+    hide() {
+        const settingsContainer = document.getElementById('settings-container')
+        settingsContainer.hidden = true
+    }
+
+    onKeydown(event) {
         if (event.key === 'r') {
             // console.log('redraw')
             redraw(true)
@@ -1003,82 +1180,243 @@ function initListeners() {
         if (event.key === 'f') {
             toggleFullScreen()
         }
-    })
-}
-
-function reset() {
-    fractal.setZoom(fxp.fromNumber(1))
-    fractal.setCenter([fxp.fromNumber(-0.5), fxp.fromNumber(0)])
-    paletteComponent.setDensity(1)
-    paletteComponent.setRotate(0)
-    // paletteComponent.setExp(0.9)
-    if (!setIterations(DEFAULT_ITERATIONS)) {
-        redraw()
     }
 }
 
-function iFeelLucky() {
-    const favorite = favorites.getRandomFavorite()
-    initFromParams(favorite)
-    fractal.initPallete()
-    redraw()
-}
+class CustomPaletteComponent {
+    constructor() {
+        this.draggedElement = null;
+        this.dropIndicator = document.createElement('div');
+        this.dropIndicator.className = 'custom-palette-drop-indicator';
+    }
 
-function updatePermalink() {
-    const url = new URL(window.location)
-    const p = url.searchParams
-    const params = {
-        center: fractal.center,
-        zoom: fractal.zoom,
-        max_iter: fractal.max_iter,
-        smooth: fractal.smooth,
-        palette: {
-            id: paletteComponent.palette.id,
-            density: paletteComponent.density,
-            rotate: paletteComponent.rotate,
-            // exp: paletteComponent.exp
+    init() {
+        const saveButton = document.getElementById('custom-palette-save')
+        saveButton.addEventListener('click', this.save.bind(this))
+
+        const cancelButton = document.getElementById('custom-palette-cancel')
+        cancelButton.addEventListener('click', this.cancel.bind(this))
+
+        const addColorButton = document.getElementById('add-custom-palette-color');
+        addColorButton.addEventListener('click', () => {
+            this.addColorInput('#ffffff');
+            this.updated();
+        });
+
+        const mirrorCheckbox = document.getElementById('custom-palette-mirror');
+        if (mirrorCheckbox) {
+            mirrorCheckbox.addEventListener('change', () => {
+                this.updated();
+            });
         }
     }
-    p.set('params', btoa(JSON.stringify(params)))
 
-    window.history.replaceState({}, '', url)
-}
+    show() {
+        this.previousPalette = paletteSelector.palette
+        const customContainer = document.getElementById('custom-palette-container')
+        customContainer.hidden = false
 
-function initUI() {
-    paletteComponent.init();
-}
+        const currentPalette = paletteSelector.palette
+        let basePalette = palette.MANDELBROT
+        if (currentPalette instanceof palette.IndexedPalette) {
+            basePalette = currentPalette
+        }
+        const paletteData = basePalette.export()
+        let paletteName = basePalette.name
+        if (!this.editingId) {
+            const basename = basePalette.name.replace(/ Copy( \(\d+\))?$/, '')
+            let copyIndex = 1
+            const palettes = palette.palettes();
+            while (true) {
+                const testName = `${basename} Copy${copyIndex > 1 ? ' (' + copyIndex + ')' : ''}`
+                const exists = palettes.some(p => p.name === testName)
+                if (!exists) {
+                    paletteName = testName
+                    break
+                }
+                copyIndex++
+            }
+        }
+        document.getElementById('custom-palette-name').value = paletteName
 
-// on load, check if there is a permalink in the url
-function init() {
-    initUI()
-    const url = new URL(window.location)
-    const params = url.searchParams.get('params')
-    if (params) {
-        initFromParams(params)
+        const colorsDiv = document.getElementById('custom-palette-colors');
+        colorsDiv.innerHTML = '';
+        paletteData.colors.forEach((color, idx) => {
+            this.addColorInput(color, colorsDiv);
+        });
+        document.getElementById('custom-palette-mirror').checked = basePalette.mirror
     }
-    // resizeTmpCanvas()
-    onResize()
-    iterationsElement.value = fractal.max_iter
-    smoothToggle.checked = fractal.smooth
-    fractal.initPallete()
-    initListeners()
-    redraw()
+
+    addColorInput(color, parentDiv) {
+        const colorsDiv = parentDiv || document.getElementById('custom-palette-colors');
+        const wrapper = document.createElement('div');
+        wrapper.className = 'input-group mb-1 custom-palette-row';
+        wrapper.draggable = true;
+
+        // Drag handle
+        const handle = document.createElement('span');
+        handle.className = 'input-group-text custom-palette-drag-handle';
+        handle.title = 'Drag to reorder';
+        handle.innerHTML = '&#x2630;'; // Unicode hamburger icon
+        handle.setAttribute('tabindex', '0');
+        wrapper.appendChild(handle);
+
+        // Drag events
+        handle.addEventListener('mousedown', (e) => {
+            wrapper.classList.add('dragging');
+        });
+        handle.addEventListener('mouseup', (e) => {
+            wrapper.classList.remove('dragging');
+        });
+        wrapper.addEventListener('dragstart', (e) => {
+            this.draggedElement = wrapper;
+            e.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => { wrapper.classList.add('hidden-drag'); }, 0);
+        });
+        wrapper.addEventListener('dragend', (e) => {
+            this.draggedElement = null;
+            wrapper.classList.remove('hidden-drag');
+            wrapper.classList.remove('dragging');
+            this.removeDropIndicator();
+        });
+        wrapper.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            // Show drop indicator above or below based on mouse position
+            const rect = wrapper.getBoundingClientRect();
+            const offset = e.clientY - rect.top;
+            const insertAbove = offset < rect.height / 2;
+            this.showDropIndicator(colorsDiv, wrapper, insertAbove);
+        });
+        wrapper.addEventListener('dragleave', (e) => {
+            // Only remove if leaving the row entirely
+            if (!wrapper.contains(e.relatedTarget)) {
+                this.removeDropIndicator();
+            }
+        });
+        wrapper.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (this.draggedElement && this.draggedElement !== wrapper) {
+                const children = Array.from(colorsDiv.children).filter(el => !el.classList.contains('custom-palette-drop-indicator'));
+                const dropIndex = children.indexOf(wrapper);
+                const insertAbove = this.dropIndicator.parentNode === colorsDiv && this.dropIndicator.nextSibling === wrapper;
+                if (insertAbove) {
+                    colorsDiv.insertBefore(this.draggedElement, wrapper);
+                } else {
+                    colorsDiv.insertBefore(this.draggedElement, wrapper.nextSibling);
+                }
+                this.updated();
+            }
+            this.removeDropIndicator();
+            this.updated();
+        });
+
+        const colorInput = document.createElement('input');
+        colorInput.type = 'color';
+        colorInput.value = color;
+        colorInput.className = 'form-control form-control-color custom-palette-color-input';
+        colorInput.title = color;
+        colorInput.addEventListener('input', () => {
+            this.updated();
+        });
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'btn btn-outline-danger btn-sm custom-palette-remove-btn';
+        removeBtn.textContent = '×';
+        removeBtn.addEventListener('click', () => {
+            colorsDiv.removeChild(wrapper);
+            this.updated();
+        });
+        wrapper.appendChild(colorInput);
+        wrapper.appendChild(removeBtn);
+        colorsDiv.appendChild(wrapper);
+    }
+
+    showDropIndicator(colorsDiv, wrapper, insertAbove) {
+        this.removeDropIndicator();
+        if (insertAbove) {
+            colorsDiv.insertBefore(this.dropIndicator, wrapper);
+        } else {
+            colorsDiv.insertBefore(this.dropIndicator, wrapper.nextSibling);
+        }
+    }
+
+    removeDropIndicator() {
+        if (this.dropIndicator.parentNode) {
+            this.dropIndicator.parentNode.removeChild(this.dropIndicator);
+        }
+    }
+
+    updated() {
+        const customPalette = this.toPalette()
+        paletteSelector.setAnonymousPalette(customPalette)
+        paletteSelector.notifyListeners()
+    }
+
+    toPalette() {
+        const colorInputs = document.querySelectorAll('#custom-palette-colors input[type="color"]');
+        const colors = Array.from(colorInputs)
+            .map(input => input.value)
+        const name = document.getElementById('custom-palette-name').value || 'Custom Palette';
+        const mirrored = document.getElementById('custom-palette-mirror').checked
+        return palette.createPaletteFromColors("<tmp>", name, colors, mirrored)
+    }
+
+    save() {
+        const customPalette = this.toPalette()
+        if (this.editingId) {
+            const exported = customPalette.export()
+            palette.updateCustomPalette(this.editingId, exported)
+            paletteSelector.init()
+            paletteSelector.setPalette(palette.getPalette(this.editingId))
+            this.previousPalette = palette.getPalette(this.editingId)
+        } else {
+            palette.addCustomPalette(customPalette)
+            paletteSelector.init()
+            paletteSelector.setPalette(customPalette)
+            this.previousPalette = customPalette // avoid resetting on hide
+        }
+        showSettingsContainer()
+    }
+
+    cancel() {
+        showSettingsContainer()
+    }
+
+    hide() {
+        this.editingId = null
+        const customContainer = document.getElementById('custom-palette-container')
+        customContainer.hidden = true
+        paletteSelector.setPalette(this.previousPalette)
+        paletteSelector.notifyListeners()
+    }
+
+    onKeydown(event) {
+        if (event.key === 'Escape') {
+            showSettingsContainer();
+        }
+    }
 }
 
-function initFromParams(params) {
-    const p = JSON.parse(atob(params))
-    fractal.setZoom(fxp.fromJSON(p.zoom))
-    fractal.setCenter(p.center.map(fxp.fromJSON))
-    fractal.max_iter = p.max_iter
-    fractal.smooth = p.smooth
-    if (p.palette) {
-        paletteComponent.setPalette(palette.getPalette(p.palette.id))
-        paletteComponent.setDensity(p.palette.density)
-        paletteComponent.setRotate(p.palette.rotate)
-        // paletteComponent.setExp(p.palette.exp)
+let activeComponent = null;
+const settingsComponent = new SettingsComponent();
+const customPaletteComponent = new CustomPaletteComponent();
+const components = [settingsComponent, customPaletteComponent];
+
+function showSettingsContainer() {
+    showComponent(settingsComponent)
+}
+
+function showCustomPaletteContainer() {
+    showComponent(customPaletteComponent)
+}
+
+function showComponent(component) {
+    if (activeComponent) {
+        activeComponent.hide()
     }
-    iterationsElement.value = fractal.max_iter
-    smoothToggle.checked = fractal.smooth
+    activeComponent = component
+    component.show()
 }
 
 window.onload = init
