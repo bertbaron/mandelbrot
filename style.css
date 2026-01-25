@@ -185,13 +185,6 @@ footer {
   align-items: center;
 }
 
-/* keep the action buttons from forcing wrapping on small screens */
-@media (max-width: 480px) {
-  .palette-actions {
-    display: none; /* hide actions on very small screens to avoid layout issues */
-  }
-}
-
 @media all and (max-width: 1200px) {
     :root {
         font-size: 5vw;
