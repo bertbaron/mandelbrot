@@ -6,6 +6,8 @@ Requires a modern browser with support for BigInt and Web Workers.
 
 A live version can be found here: https://bertbaron.github.io/mandelbrot/
 
+You can share your favorite views by copying the URL and add it in a comment to [this issue](https://github.com/bertbaron/mandelbrot/issues/4)
+
 ## Table of Contents
 
 - [Background](#background)
