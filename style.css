@@ -110,6 +110,88 @@ footer {
     z-index: 1;
 }
 
+
+#custom-palette-colors {
+    font-family: monospace;
+}
+
+.custom-palette-row {
+  cursor: grab;
+}
+
+.custom-palette-row.dragging {
+  opacity: 0.5;
+}
+
+.custom-palette-row.hidden-drag {
+  display: none !important;
+}
+
+.custom-palette-drag-handle {
+  cursor: grab;
+  user-select: none;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  min-width: 2em;
+  text-align: center;
+}
+
+.custom-palette-color-input {
+  width: 3em;
+  min-width: 3em;
+  max-width: 3em;
+  padding: 0;
+  border: 1px solid #dee2e6;
+}
+
+.custom-palette-remove-btn {
+  margin-left: 0.5em;
+}
+
+.custom-palette-drop-indicator {
+  height: 0;
+  border-top: 2px solid #007bff;
+  margin: 0 0.5em;
+  pointer-events: none;
+}
+
+/* Palette action buttons in dropdown */
+.palette-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+}
+
+.palette-action {
+  background: transparent;
+  border: none;
+  padding: 2px 6px;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.9em;
+  line-height: 1;
+}
+
+.palette-action:hover {
+  color: #ffdddd;
+  background: rgba(255,255,255,0.05);
+  border-radius: 3px;
+}
+
+/* Make dropdown items use flexbox so the label and actions align */
+.dropdown-item.flex-grow-1 {
+  display: flex;
+  align-items: center;
+}
+
+/* keep the action buttons from forcing wrapping on small screens */
+@media (max-width: 480px) {
+  .palette-actions {
+    display: none; /* hide actions on very small screens to avoid layout issues */
+  }
+}
+
 @media all and (max-width: 1200px) {
     :root {
         font-size: 5vw;

@@ -2,7 +2,7 @@
  * @author Bert Baron
  */
 export function getPalette(id) {
-    const palette = PALETTES.find(p => p.id === id)
+    const palette = palettes().find(p => p.id === id)
     if (palette) return palette
     return ORIGINAL
 }
@@ -28,6 +28,71 @@ export function initPallet(palette, density, rotate, exp, max_iter) {
     return rgbaBuffer
 }
 
+export function createPaletteFromColors(id, name, colors, mirror) {
+    const colorValues = colors.map(colorValue => {
+        if (typeof colorValue === 'string') {
+            return [parseInt(colorValue.slice(1, 3), 16), parseInt(colorValue.slice(3, 5), 16), parseInt(colorValue.slice(5, 7), 16)]
+        } else {
+            return colorValue
+        }
+    })
+    return new IndexedPalette(id, name, colorValues, mirror)
+}
+
+export function palettes() {
+    return PALETTES.slice().concat(loadCustomPalettes())
+}
+
+export function addCustomPalette(palette) {
+    let arr = loadCustomPalettesRaw()
+    arr.push({name: palette.name, colors: palette.colors, mirror: palette.mirror})
+    palette.id = `custom_${arr.length - 1}`
+    saveCustomPalettes(arr)
+}
+
+export function deleteCustomPalette(id) {
+    const index = parseInt(id.split("_")[1])
+    let arr = loadCustomPalettesRaw()
+    arr.splice(index, 1)
+    saveCustomPalettes(arr)
+}
+
+export function updateCustomPalette(id, pal) {
+    const index = parseInt(id.split("_")[1])
+    let arr = loadCustomPalettesRaw()
+    if (index < 0 || index >= arr.length) return false
+    arr[index] = { name: pal.name, colors: pal.colors, mirror: pal.mirror }
+    saveCustomPalettes(arr)
+    return true
+}
+
+export function loadCustomPalettes() {
+    const rawPalettes = loadCustomPalettesRaw()
+    let palettes = []
+    for (let i = 0; i < rawPalettes.length; i++) {
+        const obj = rawPalettes[i]
+        const id = `custom_${i}`
+        palettes.push(createPaletteFromColors(id, obj.name, obj.colors, obj.mirror || false))
+    }
+    return palettes
+}
+
+const CUSTOM_PALETTES_KEY = "customPalettes"
+
+function loadCustomPalettesRaw() {
+    try {
+        return JSON.parse(localStorage.getItem(CUSTOM_PALETTES_KEY) || "[]")
+    } catch (e) {
+        return []
+    }
+}
+
+function saveCustomPalettes(palettes) {
+    let arr = palettes.map(palette => ({name: palette.name, colors: palette.colors, mirror: palette.mirror}))
+    localStorage.setItem(CUSTOM_PALETTES_KEY, JSON.stringify(arr))
+}
+
+
 // not sure if this is correct, it does result in vibrant colors though
 function toSRGB(r, g, b) {
     function toSRGBComponent(c) {
@@ -37,8 +102,29 @@ function toSRGB(r, g, b) {
     return [toSRGBComponent(r), toSRGBComponent(g), toSRGBComponent(b)]
 }
 
-class OriginalPalette {
+class Palette {
     constructor() {
+        if (new.target === Palette) {
+          throw new TypeError("Cannot instantiate abstract class Palette directly")
+        }
+    }
+
+    isCustom() {
+        return false
+    }
+
+    getColor(v, rotate) {
+        throw new Error("Method 'getColor(v, rotate)' must be implemented.");
+    }
+
+    isSamePalette(other) {
+        return this.id === other.id
+    }
+}
+
+class OriginalPalette extends Palette {
+    constructor() {
+        super()
         this.id = 'original'
         this.name = "Original"
         this.wavelengths = [80, 81, 85]
@@ -60,8 +146,9 @@ class OriginalPalette {
     }
 }
 
-class GrayScalePalette {
+class GrayScalePalette extends Palette {
     constructor(id, name, min, max) {
+        super()
         this.id = id
         this.name = name
         this.min = min
@@ -75,8 +162,9 @@ class GrayScalePalette {
     }
 }
 
-class SingleColorPalette {
+class SingleColorPalette extends Palette {
     constructor(id, name, color) {
+        super()
         this.id = id
         this.name = name
         this.color = color
@@ -87,14 +175,33 @@ class SingleColorPalette {
     }
 }
 
-class IndexedPalette {
-    constructor(id, name, colors, mirror, reverse) {
+export class IndexedPalette extends Palette {
+    constructor(id, name, colors, mirror) {
+        super()
         this.id = id
         this.name = name
         this.colors = []
         this.colors = this.colors.concat(colors)
-        reverse && this.colors.reverse()
+        this.mirror = mirror
         mirror && (this.colors = this.colors.concat(this.colors.slice(1, this.colors.length - 1).reverse()))
+    }
+
+    isCustom() {
+        return this.id.startsWith("custom_") || this.id === "embedded"
+    }
+
+    isSamePalette(other) {
+        if (!other || !other.isCustom()) return false
+        if (this.mirror !== other.mirror) return false
+        if (this.colors.length !== other.colors.length) return false
+        for (let i = 0; i < this.colors.length; i++) {
+            const c1 = this.colors[i]
+            const c2 = other.colors[i]
+            if (c1[0] !== c2[0] || c1[1] !== c2[1] || c1[2] !== c2[2]) {
+                return false
+            }
+        }
+        return true
     }
 
     getColor(v, rotate) {
@@ -109,12 +216,29 @@ class IndexedPalette {
         }
         return this.interpolationFunctions
     }
+
+    export() {
+        // colorValues is the list of colors in html rgb format. If mirror is true, only the first half is stored.
+        let colorValues = []
+        const len = this.mirror ? Math.ceil(this.colors.length / 2) : this.colors.length
+        for (let i = 0; i < len; i++) {
+            const c = this.colors[i]
+            colorValues.push(`#${((1 << 24) + (c[0] << 16) + (c[1] << 8) + c[2]).toString(16).slice(1)}`)
+        }
+
+        return {
+            id: this.id,
+            name: this.name,
+            colors: colorValues,
+            mirror: this.mirror
+        }
+    }
 }
 
 const ORIGINAL = new OriginalPalette()
 
 // Similar to that of Ultra Fractal, although these colors are equaly spaced
-const MANDELBROT = new IndexedPalette("mandelbrot", "Mandelbrot", [
+export const MANDELBROT = new IndexedPalette("mandelbrot", "Mandelbrot", [
     [0, 7, 100],
     [32, 107, 203],
     [237, 255, 255],
@@ -125,7 +249,7 @@ const MANDELBROT = new IndexedPalette("mandelbrot", "Mandelbrot", [
 const LAVA = new IndexedPalette("lava", "Lava", [
     [0, 0, 0],
     [10, 0, 0],
-    [20, 0, 0], // [20, 0, 0],
+    [20, 0, 0],
     [40, 0, 0],
     [80, 0, 0],
     [160, 10, 0],
@@ -203,7 +327,7 @@ const JEWELLERY = new IndexedPalette("jewellery", "Jewellery", [
     [0, 0, 153]
 ], false)
 
-export const PALETTES = [
+const PALETTES = [
     ORIGINAL,
     MANDELBROT,
     LAVA,
