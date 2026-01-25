@@ -146,18 +146,18 @@ export class MandelbrotWebGPU {
             values = result.values
             smooth = result.smooth
             const end = performance.now()
-//             if (passnr === 0) {
-//                 console.log(`Pass ${passnr} of ${indices.length} pixels took ${(end - start).toFixed(1)}ms`)
-//             }
+            if (passnr % 25 === 0) {
+                console.log(`Pass ${passnr} of ${indices.length} pixels took ${(end - start).toFixed(1)}ms`)
+            }
             if (this.shouldStop()) return {
                 error: "Stopped"
             }
-//             if (passnr > 50) {
-//                 console.log('Too many passes')
-//                 return {
-//                     error: "Too many passes"
-//                 }
-//             }
+            if (passnr > 100) {
+                console.log('Too many passes')
+                return {
+                    error: "Too many passes"
+                }
+            }
             indices = remainingIndices
 
             if (indices.length > 0) {
