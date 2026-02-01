@@ -31,7 +31,15 @@ export function initPallet(palette, density, rotate, exp, max_iter) {
 export function createPaletteFromColors(id, name, colors, mirror) {
     const colorValues = colors.map(colorValue => {
         if (typeof colorValue === 'string') {
-            return [parseInt(colorValue.slice(1, 3), 16), parseInt(colorValue.slice(3, 5), 16), parseInt(colorValue.slice(5, 7), 16)]
+            let r = parseInt(colorValue.slice(1, 3), 16);
+            let g = parseInt(colorValue.slice(3, 5), 16);
+            let b = parseInt(colorValue.slice(5, 7), 16);
+            let weight = 1
+            const weightIndex = colorValue.indexOf(':')
+            if (weightIndex !== -1) {
+                weight = parseFloat(colorValue.slice(weightIndex + 1))
+            }
+            return [r, g, b, weight]
         } else {
             return colorValue
         }
@@ -176,12 +184,17 @@ class SingleColorPalette extends Palette {
 }
 
 export class IndexedPalette extends Palette {
+    /*
+     * colors: array of [r, g, b] or [r, g, b, weight] values
+     */
     constructor(id, name, colors, mirror) {
         super()
         this.id = id
         this.name = name
         this.colors = []
-        this.colors = this.colors.concat(colors)
+        // assign a weight of 1 to each color when not specified
+        this.paletteColors = colors.map(c => (c.length > 3 ? c : [c[0], c[1], c[2], 1]))
+        this.colors = this.colors.concat(this.paletteColors)
         this.mirror = mirror
         mirror && (this.colors = this.colors.concat(this.colors.slice(1, this.colors.length - 1).reverse()))
     }
@@ -197,7 +210,7 @@ export class IndexedPalette extends Palette {
         for (let i = 0; i < this.colors.length; i++) {
             const c1 = this.colors[i]
             const c2 = other.colors[i]
-            if (c1[0] !== c2[0] || c1[1] !== c2[1] || c1[2] !== c2[2]) {
+            if (c1[0] !== c2[0] || c1[1] !== c2[1] || c1[2] !== c2[2] || c1[3] !== c2[3]) {
                 return false
             }
         }
@@ -205,25 +218,35 @@ export class IndexedPalette extends Palette {
     }
 
     getColor(v, rotate) {
-        const palette = this.colors
-        const scaled = v * palette.length / 100 + rotate / 360 * palette.length
+        const scaled = v / 100 + rotate / 360
         return this.getInterpolationFunctions().map(fn => Math.round(fn(scaled)))
     }
 
     getInterpolationFunctions() {
         if (!this.interpolationFunctions) {
-            this.interpolationFunctions = [0, 1, 2].map(i => monotoneCubicInterpolationFN(this.colors.map(c => c[i])))
+            const weights = this.colors.map(c => c[3])
+            const timeWarp = timeWarpFn(weights)
+            this.interpolationFunctions = [0, 1, 2].map(channel => {
+                const channelValues = this.colors.map(c => c[channel])
+                return function (t) {
+                    return monotoneCubicInterpolationFN(channelValues)(timeWarp(t))
+                }
+            })
         }
         return this.interpolationFunctions
     }
 
     export() {
-        // colorValues is the list of colors in html rgb format. If mirror is true, only the first half is stored.
+        // colorValues is the list of colors in html rgb format with optional `:<weight>` suffix.
+        // If mirror is true, only the first half is stored.
         let colorValues = []
-        const len = this.mirror ? Math.ceil(this.colors.length / 2) : this.colors.length
-        for (let i = 0; i < len; i++) {
-            const c = this.colors[i]
-            colorValues.push(`#${((1 << 24) + (c[0] << 16) + (c[1] << 8) + c[2]).toString(16).slice(1)}`)
+        for (let c of this.paletteColors) {
+            let encoded = `#${((1 << 24) + (c[0] << 16) + (c[1] << 8) + c[2]).toString(16).slice(1)}`
+            const weight = c[3]
+            if (weight && weight !== 1) {
+                encoded += `:${weight}`
+            }
+            colorValues.push(encoded)
         }
 
         return {
@@ -237,13 +260,25 @@ export class IndexedPalette extends Palette {
 
 const ORIGINAL = new OriginalPalette()
 
-// Similar to that of Ultra Fractal, although these colors are equaly spaced
+// Similar to that of Ultra Fractal, but positions are replaced by (somewhat rounded) weights
+// From the wiki, Ultra Fractal uses:
+// Source - https://stackoverflow.com/a/25816111
+// Posted by NightElfik, modified by community. See post 'Timeline' for change history
+// Retrieved 2026-02-01, License - CC BY-SA 4.0
+// Position = 0.0     Color = (  0,   7, 100)
+// Position = 0.16    Color = ( 32, 107, 203)
+// Position = 0.42    Color = (237, 255, 255)
+// Position = 0.6425  Color = (255, 170,   0)
+// Position = 0.8575  Color = (  0,   2,   0)
+function toReasonableValue(v) {
+    return Math.round(v * 100) / 10
+}
 export const MANDELBROT = new IndexedPalette("mandelbrot", "Mandelbrot", [
-    [0, 7, 100],
-    [32, 107, 203],
-    [237, 255, 255],
-    [255, 170, 0],
-    [0, 2, 0],
+    [0, 7, 100, toReasonableValue(0.16)],
+    [32, 107, 203, toReasonableValue(0.26)],
+    [237, 255, 255, toReasonableValue(0.2225)],
+    [255, 170, 0, toReasonableValue(0.215)],
+    [0, 2, 0, toReasonableValue(0.1425)]
 ], false)
 
 const LAVA = new IndexedPalette("lava", "Lava", [
@@ -340,20 +375,50 @@ const PALETTES = [
     new SingleColorPalette("black_white", "Pure B/W", [255, 255, 255]),
 ]
 
-function linearInterpolationFN(values) {
-    const N = values.length
-    return function (x) {
-        const t = x - Math.floor(x)
-        let k = Math.floor(x)
-        if (k < 0) k += N
+/**
+ * Returns a function that warps the position in the palette (t) based on the provided weights.
+ */
+export function timeWarpFn(weights) {
+    const N = weights.length;
 
-        const yk0 = values[k % N]
-        const yk1 = values[(k + 1) % N]
-        return yk0 * (1 - t) + yk1 * t
+    const centers = new Array(N + 1);
+    let totalWeight = 0;
+    for (let i = 0; i <= N; i++) {
+        totalWeight += weights[i % N];
+        centers[i] = totalWeight - weights[i % N] / 2 - weights[0]/2; // center around 0
+    }
+    totalWeight -= weights[0]
+
+    return function (t) {
+        let w = ((t % 1) + 1) % 1; // ensure [0,1)
+        w *= totalWeight;
+
+        let i = 0;
+        while (i < N - 1 && w >= centers[i + 1]) {
+            i++;
+        }
+        const p0 = centers[i];
+        const p1 = centers[i + 1];
+        const w0 = weights[i % N];
+        const w1 = weights[(i + 1) % N];
+
+        // weighted midpoint between the two centers
+        const halfway = (p0 * w1 + p1 * w0) / (w0 + w1);
+
+        // linear interpolation between p0 and p1, split at halfway point
+        // we should try to find a better easing function here
+        const localT = w < halfway
+            ? (w - p0) / (halfway - p0) * 0.5
+            : 0.5 + (w - halfway) / (p1 - halfway) * 0.5;
+
+        return (i + localT) / N
     }
 }
 
+
+
 // https://en.wikipedia.org/wiki/Monotone_cubic_interpolation
+// adjusted with weights for each value
 function monotoneCubicInterpolationFN(values) {
     const N = values.length;
     const delta = []
@@ -366,7 +431,6 @@ function monotoneCubicInterpolationFN(values) {
         const dk = delta[k % N]
         const dk1 = delta[(k + 1) % N]
         m[(k + 1) % N] = dk * dk1 <= 0 ? 0 : (dk + dk1) / 2
-        // m[(k + 1) % N] = (dk + dk1) / 2
     }
 
     for (let k = 0; k < N; k++) {
@@ -375,13 +439,13 @@ function monotoneCubicInterpolationFN(values) {
             const beta = m[(k + 1) % N] / delta[k]
             if (alpha < 0) {
                 m[k] = 0
-            }
+        }
             if (beta < 0) {
                 m[(k + 1) % N] = 0
-            }
+    }
 
-            const sqRadius = alpha * alpha + beta * beta
-            if (sqRadius > 9) {
+    const sqRadius = alpha * alpha + beta * beta
+        if (sqRadius > 9) {
                 const tau = 3 / Math.sqrt(sqRadius)
                 m[k] = tau * alpha * delta[k]
                 m[(k + 1) % N] = tau * beta * delta[k]
@@ -390,6 +454,7 @@ function monotoneCubicInterpolationFN(values) {
     }
 
     return function (x) {
+        x = x * N // scale to number of values
         const t = x - Math.floor(x)
         let k = Math.floor(x)
         if (k < 0) k += N
