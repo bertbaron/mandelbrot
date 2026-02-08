@@ -64,7 +64,7 @@ body {
 #settings {
     margin: 20px;
     padding: 10px;
-    min-width: 540px;
+    /*min-width: 540px;*/
 }
 
 .collapse-ruler button {
