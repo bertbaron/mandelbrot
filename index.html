@@ -164,8 +164,8 @@
                 </div>
             </div>
             <div class="mb-2 row">
-                <label class="col-form-label col col-sm-6">Palette Colors</label>
-                <div class="col col-sm-6" id="custom-palette-colors-container">
+                <label class="col-form-label col col-sm-6 d-none d-sm-block">Palette Colors</label>
+                <div class="col-12 col-sm-6" id="custom-palette-colors-container">
                     <div id="custom-palette-colors"></div>
                     <button id="add-custom-palette-color" class="btn btn-outline-primary btn-sm mt-2" type="button">+ Add Color</button>
                 </div>
@@ -178,13 +178,13 @@
             </div>
             <div class="mb-2 g-1 row">
                 <div class="col col-sm-12 d-flex align-items-center">
-                    <canvas id="custom-palette-preview"></canvas>
+                    <canvas id="custom-palette-preview" class="custom-palette-preview"></canvas>
                 </div>
             </div>
             <div class="mb-2 g-1 row">
                 <div class="col col-sm-6">
                     <button id="custom-palette-save" class="btn btn-success form-control form-control-sm" type="button">
-                        Save Palette
+                        <span >💾</span> Save
                     </button>
                 </div>
                 <div class="col col-sm-6">
@@ -192,7 +192,7 @@
                         Cancel
                     </button>
                     <button id="custom-palette-delete" class="btn btn-outline-danger form-control form-control-sm custom-palette-delete-btn mt-2" type="button">
-                        <span >🗑</span> Delete Palette
+                        <span >🗑</span> Delete
                     </button>
                 </div>
             </div>
