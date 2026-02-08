@@ -2,7 +2,7 @@
  * @author Bert Baron
  */
 import * as fxp from './fxp.mjs'
-import * as palette from './palette.js'
+import * as palette from './palette.mjs'
 import * as favorites from './favorites.js'
 import * as mgpu from './mandelbrotWebGPU.mjs'
 import {WorkerContext} from "./workerContext.mjs";
@@ -571,30 +571,14 @@ class PaletteSelector {
             if (p.id === this.palette.id) {
                 anchor.classList.add("active")
             }
+            anchor.appendChild(createPreviewCanvas(p, 40))
 
-            // Palette preview canvas
-            const preview = document.createElement("canvas");
-            preview.width = 40;
-            preview.height = 12;
-            preview.style.verticalAlign = "middle";
-            preview.style.marginRight = "8px";
-            const ctx = preview.getContext("2d");
-            for (let x = 0; x < preview.width; x++) {
-                let color = p.getColor(x / preview.width * 100, 0);
-                ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
-                ctx.fillRect(x, 0, 1, preview.height);
-            }
-
-            anchor.appendChild(preview);
-            // Palette name
             const nameSpan = document.createElement("span");
             nameSpan.textContent = p.name;
             anchor.appendChild(nameSpan);
 
-            // Action buttons (edit / delete) - placed as sibling to the anchor so we don't nest interactive elements
             const actionsSpan = document.createElement('span');
             actionsSpan.className = 'palette-actions';
-            // Only show edit/delete for custom palettes
             if (p.isCustom && p.isCustom()) {
                 const editBtn = document.createElement('button');
                 editBtn.type = 'button';
@@ -611,29 +595,6 @@ class PaletteSelector {
                     showCustomPaletteContainer();
                 });
                 actionsSpan.appendChild(editBtn);
-
-                const deleteBtn = document.createElement('button');
-                deleteBtn.type = 'button';
-                deleteBtn.className = 'palette-action palette-delete';
-                deleteBtn.title = 'Delete palette';
-                deleteBtn.setAttribute('aria-label', 'Delete palette');
-                deleteBtn.textContent = '🗑';
-                deleteBtn.dataset.paletteId = p.id;
-                deleteBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (!confirm(`Delete palette "${p.name}"?`)) return;
-                    palette.deleteCustomPalette(p.id);
-                    // rebuild menu and pick a safe palette
-                    paletteSelector.init();
-                    // if the deleted palette was currently selected, pick the first available
-                    if (paletteSelector.palette && paletteSelector.palette.id === p.id) {
-                        const all = palette.palettes();
-                        paletteSelector.setPalette(all[0]);
-                    }
-                    this.notifyListeners()
-                });
-                actionsSpan.appendChild(deleteBtn);
             }
 
             anchor.addEventListener("click", () => {
@@ -678,13 +639,13 @@ class PaletteSelector {
                 anchor.classList.remove("active")
             }
         }
-        // set the palette name as the button text
-        document.getElementById("palette-dropdown").innerText = palette.name
+
+        const paletteDropdown = document.getElementById("palette-dropdown")
+        paletteDropdown.innerText = palette.name
     }
 
     setEmbeddedPalette(colors, mirror) {
         let paletteObject = palette.createPaletteFromColors('embedded', '<embedded>', colors, mirror)
-        // loop trough all palettes. If there is a custom palette with the same colors, use that one instead
         for (let p of palette.palettes()) {
             if (p.isSamePalette(paletteObject)) {
                 paletteObject = p
@@ -699,7 +660,6 @@ class PaletteSelector {
 
     setDensity(density, skipControl) {
         this.density = density
-        // document.getElementById("palette-density-label").innerText = "Density (" + density + ")"
         skipControl || (this.densitySlider.value = this.density)
         this.notifyListeners()
     }
@@ -721,6 +681,22 @@ class PaletteSelector {
         }
     }
 }
+
+function createPreviewCanvas(palette, size) {
+    const preview = document.createElement("canvas");
+    preview.width = size;
+    preview.height = 12;
+    preview.style.verticalAlign = "middle";
+    preview.style.marginRight = "8px";
+    const ctx = preview.getContext("2d");
+    for (let x = 0; x < preview.width; x++) {
+        let color = palette.getColor(x / preview.width * 100, 0);
+        ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
+        ctx.fillRect(x, 0, 1, preview.height);
+    }
+    return preview;
+}
+
 
 const paletteSelector = new PaletteSelector();
 
@@ -1209,6 +1185,22 @@ class CustomPaletteComponent {
                 this.updated();
             });
         }
+
+        const deleteButton = document.getElementById('custom-palette-delete');
+        deleteButton.addEventListener('click', () => {
+            if (!this.editingId) return;
+            const paletteObj = palette.getPalette(this.editingId);
+            if (!paletteObj) return;
+            if (!confirm(`Delete palette "${paletteObj.name}"?`)) return;
+            // To preserve the image after deleting the current palette, we set it as embedded palette
+            const exported = paletteObj.export ? paletteObj.export() : { colors: paletteObj.colors, mirror: paletteObj.mirror };
+            palette.deleteCustomPalette(this.editingId);
+            paletteSelector.init();
+            paletteSelector.setEmbeddedPalette(exported.colors, exported.mirror);
+            this.previousPalette = null;
+            this.editingId = null;
+            showSettingsContainer();
+        });
     }
 
     show() {
@@ -1221,7 +1213,6 @@ class CustomPaletteComponent {
         if (currentPalette instanceof palette.IndexedPalette) {
             basePalette = currentPalette
         }
-        const paletteData = basePalette.export()
         let paletteName = basePalette.name
         if (!this.editingId) {
             const basename = basePalette.name.replace(/ Copy( \(\d+\))?$/, '')
@@ -1241,10 +1232,20 @@ class CustomPaletteComponent {
 
         const colorsDiv = document.getElementById('custom-palette-colors');
         colorsDiv.innerHTML = '';
-        paletteData.colors.forEach((color, idx) => {
+        basePalette.paletteColors.forEach((color) => {
             this.addColorInput(color, colorsDiv);
         });
         document.getElementById('custom-palette-mirror').checked = basePalette.mirror
+
+        // Show delete button only if editing an existing custom palette
+        const deleteButton = document.getElementById('custom-palette-delete');
+        if (this.editingId && palette.getPalette(this.editingId)?.isCustom?.()) {
+            deleteButton.style.display = '';
+        } else {
+            deleteButton.style.display = 'none';
+        }
+
+        this.updated()
     }
 
     addColorInput(color, parentDiv) {
@@ -1298,7 +1299,6 @@ class CustomPaletteComponent {
             e.preventDefault();
             if (this.draggedElement && this.draggedElement !== wrapper) {
                 const children = Array.from(colorsDiv.children).filter(el => !el.classList.contains('custom-palette-drop-indicator'));
-                const dropIndex = children.indexOf(wrapper);
                 const insertAbove = this.dropIndicator.parentNode === colorsDiv && this.dropIndicator.nextSibling === wrapper;
                 if (insertAbove) {
                     colorsDiv.insertBefore(this.draggedElement, wrapper);
@@ -1311,14 +1311,43 @@ class CustomPaletteComponent {
             this.updated();
         });
 
+        // Color input
+        let rgb = color;
+        let weight = 1;
+        if (Array.isArray(color)) {
+            rgb = `#${((1 << 24) + (color[0] << 16) + (color[1] << 8) + color[2]).toString(16).slice(1)}`;
+            weight = color.length > 3 ? color[3] : 1;
+        }
         const colorInput = document.createElement('input');
         colorInput.type = 'color';
-        colorInput.value = color;
+        colorInput.value = rgb;
         colorInput.className = 'form-control form-control-color custom-palette-color-input';
-        colorInput.title = color;
+        colorInput.title = rgb;
         colorInput.addEventListener('input', () => {
             this.updated();
         });
+
+        // Weight input
+        const weightInput = document.createElement('input');
+        weightInput.type = 'number';
+        // weightInput.min = '0.01';
+        weightInput.step = '0.5';
+        weightInput.value = String(weight)
+        weightInput.className = 'form-control form-control-sm';
+        weightInput.id = 'custom-palette-weight-input'
+        weightInput.title = 'Weight';
+        weightInput.addEventListener('input', () => {
+            if (parseFloat(weightInput.value) <= 0 || isNaN(parseFloat(weightInput.value))) {
+                weightInput.value = "1";
+            }
+            this.updated();
+        });
+        const weightLabel = document.createElement('span');
+        weightLabel.className = 'input-group-text';
+        weightLabel.textContent = 'w';
+        weightLabel.title = 'Weight';
+
+        // Remove button
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
         removeBtn.className = 'btn btn-outline-danger btn-sm custom-palette-remove-btn';
@@ -1327,7 +1356,10 @@ class CustomPaletteComponent {
             colorsDiv.removeChild(wrapper);
             this.updated();
         });
+
         wrapper.appendChild(colorInput);
+        wrapper.appendChild(weightLabel);
+        wrapper.appendChild(weightInput);
         wrapper.appendChild(removeBtn);
         colorsDiv.appendChild(wrapper);
     }
@@ -1351,15 +1383,34 @@ class CustomPaletteComponent {
         const customPalette = this.toPalette()
         paletteSelector.setAnonymousPalette(customPalette)
         paletteSelector.notifyListeners()
+        const previewCanvas = document.getElementById('custom-palette-preview');
+        if (previewCanvas) {
+            const ctx = previewCanvas.getContext('2d');
+            ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            for (let x = 0; x < previewCanvas.width; x++) {
+                let color = customPalette.getColor(x / previewCanvas.width * 100, 0);
+                ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
+                ctx.fillRect(x, 0, 1, previewCanvas.height);
+            }
+        }
     }
 
     toPalette() {
-        const colorInputs = document.querySelectorAll('#custom-palette-colors input[type="color"]');
-        const colors = Array.from(colorInputs)
-            .map(input => input.value)
+        const colorRows = document.querySelectorAll('#custom-palette-colors .custom-palette-row');
+        const colors = Array.from(colorRows).map(row => {
+            const colorInput = row.querySelector('input[type="color"]');
+            const weightInput = row.querySelector('input[type="number"]');
+            const hex = colorInput.value;
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            let w = parseFloat(weightInput.value);
+            if (!(w > 0)) w = 1;
+            return [r, g, b, w];
+        });
         const name = document.getElementById('custom-palette-name').value || 'Custom Palette';
-        const mirrored = document.getElementById('custom-palette-mirror').checked
-        return palette.createPaletteFromColors("<tmp>", name, colors, mirrored)
+        const mirrored = document.getElementById('custom-palette-mirror').checked;
+        return palette.createPaletteFromColors('<tmp>', name, colors, mirrored);
     }
 
     save() {
@@ -1369,12 +1420,13 @@ class CustomPaletteComponent {
             palette.updateCustomPalette(this.editingId, exported)
             paletteSelector.init()
             paletteSelector.setPalette(palette.getPalette(this.editingId))
-            this.previousPalette = palette.getPalette(this.editingId)
+            this.previousPalette = null
         } else {
-            palette.addCustomPalette(customPalette)
+            const exported = customPalette.export()
+            palette.addCustomPalette(exported)
             paletteSelector.init()
             paletteSelector.setPalette(customPalette)
-            this.previousPalette = customPalette // avoid resetting on hide
+            this.previousPalette = null
         }
         showSettingsContainer()
     }
@@ -1387,7 +1439,9 @@ class CustomPaletteComponent {
         this.editingId = null
         const customContainer = document.getElementById('custom-palette-container')
         customContainer.hidden = true
-        paletteSelector.setPalette(this.previousPalette)
+        if (this.previousPalette) {
+            paletteSelector.setPalette(this.previousPalette)
+        }
         paletteSelector.notifyListeners()
     }
 

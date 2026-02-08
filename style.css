@@ -64,6 +64,7 @@ body {
 #settings {
     margin: 20px;
     padding: 10px;
+    min-width: 540px;
 }
 
 .collapse-ruler button {
@@ -144,8 +145,8 @@ footer {
   border: 1px solid #dee2e6;
 }
 
-.custom-palette-remove-btn {
-  margin-left: 0.5em;
+#custom-palette-weight-input {
+    /*width: 3em;*/
 }
 
 .custom-palette-drop-indicator {
@@ -153,6 +154,13 @@ footer {
   border-top: 2px solid #007bff;
   margin: 0 0.5em;
   pointer-events: none;
+}
+
+/*Rounded corners*/
+#custom-palette-preview {
+    border-radius: 5px;
+    height: 20px;
+    width: 100%;
 }
 
 /* Palette action buttons in dropdown */
