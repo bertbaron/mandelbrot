@@ -149,14 +149,18 @@ footer {
     /*width: 3em;*/
 }
 
-.custom-palette-delete-btn {
-}
-
 .custom-palette-drop-indicator {
   height: 0;
   border-top: 2px solid #007bff;
   margin: 0 0.5em;
   pointer-events: none;
+}
+
+/*Rounded corners*/
+#custom-palette-preview {
+    border-radius: 5px;
+    height: 20px;
+    width: 100%;
 }
 
 /* Palette action buttons in dropdown */

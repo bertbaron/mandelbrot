@@ -571,22 +571,8 @@ class PaletteSelector {
             if (p.id === this.palette.id) {
                 anchor.classList.add("active")
             }
+            anchor.appendChild(createPreviewCanvas(p, 40))
 
-            // Palette preview canvas
-            const preview = document.createElement("canvas");
-            preview.width = 40;
-            preview.height = 12;
-            preview.style.verticalAlign = "middle";
-            preview.style.marginRight = "8px";
-            const ctx = preview.getContext("2d");
-            for (let x = 0; x < preview.width; x++) {
-                let color = p.getColor(x / preview.width * 100, 0);
-                ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
-                ctx.fillRect(x, 0, 1, preview.height);
-            }
-
-            anchor.appendChild(preview);
-            // Palette name
             const nameSpan = document.createElement("span");
             nameSpan.textContent = p.name;
             anchor.appendChild(nameSpan);
@@ -653,8 +639,9 @@ class PaletteSelector {
                 anchor.classList.remove("active")
             }
         }
-        // set the palette name as the button text
-        document.getElementById("palette-dropdown").innerText = palette.name
+
+        const paletteDropdown = document.getElementById("palette-dropdown")
+        paletteDropdown.innerText = palette.name
     }
 
     setEmbeddedPalette(colors, mirror) {
@@ -673,7 +660,6 @@ class PaletteSelector {
 
     setDensity(density, skipControl) {
         this.density = density
-        // document.getElementById("palette-density-label").innerText = "Density (" + density + ")"
         skipControl || (this.densitySlider.value = this.density)
         this.notifyListeners()
     }
@@ -695,6 +681,22 @@ class PaletteSelector {
         }
     }
 }
+
+function createPreviewCanvas(palette, size) {
+    const preview = document.createElement("canvas");
+    preview.width = size;
+    preview.height = 12;
+    preview.style.verticalAlign = "middle";
+    preview.style.marginRight = "8px";
+    const ctx = preview.getContext("2d");
+    for (let x = 0; x < preview.width; x++) {
+        let color = palette.getColor(x / preview.width * 100, 0);
+        ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
+        ctx.fillRect(x, 0, 1, preview.height);
+    }
+    return preview;
+}
+
 
 const paletteSelector = new PaletteSelector();
 
@@ -1242,6 +1244,8 @@ class CustomPaletteComponent {
         } else {
             deleteButton.style.display = 'none';
         }
+
+        this.updated()
     }
 
     addColorInput(color, parentDiv) {
@@ -1379,6 +1383,16 @@ class CustomPaletteComponent {
         const customPalette = this.toPalette()
         paletteSelector.setAnonymousPalette(customPalette)
         paletteSelector.notifyListeners()
+        const previewCanvas = document.getElementById('custom-palette-preview');
+        if (previewCanvas) {
+            const ctx = previewCanvas.getContext('2d');
+            ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            for (let x = 0; x < previewCanvas.width; x++) {
+                let color = customPalette.getColor(x / previewCanvas.width * 100, 0);
+                ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
+                ctx.fillRect(x, 0, 1, previewCanvas.height);
+            }
+        }
     }
 
     toPalette() {
