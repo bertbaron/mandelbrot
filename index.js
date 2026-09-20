@@ -3,7 +3,6 @@
  */
 import * as fxp from './fxp.mjs'
 import * as palette from './palette.mjs'
-import * as favorites from './favorites.js'
 import * as mgpu from './mandelbrotWebGPU.mjs'
 import {WorkerContext} from "./workerContext.mjs";
 
@@ -1021,7 +1020,7 @@ function initListeners() {
         reset();
     })
     document.getElementById("lucky-button").addEventListener('click', (event) => {
-        iFeelLucky();
+        iFeelLucky().catch(e => console.error('could not load favorites', e));
     })
     appElement.addEventListener('keydown', (event) => {
         activeComponent.onKeydown(event)
@@ -1039,7 +1038,20 @@ function reset() {
     }
 }
 
-function iFeelLucky() {
+// Lazy-load favourites to not slowdown initial loading when we add more favourites
+function loadFavorites() {
+    return import('./favorites.js')
+}
+
+const warmFavorites = () => loadFavorites().catch(() => {})
+if (window.requestIdleCallback) {
+    requestIdleCallback(warmFavorites, {timeout: 10000})
+} else {
+    setTimeout(warmFavorites, 10000)
+}
+
+async function iFeelLucky() {
+    const favorites = await loadFavorites()
     const favorite = favorites.getRandomFavorite()
     initFromParams(favorite)
     fractal.initPallete()
