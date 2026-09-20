@@ -12,6 +12,19 @@ export function isBuiltInPalette(id) {
     return PALETTES.some(p => p.id === id)
 }
 
+// The colors of a palette that only exists in this browser have to travel with the url.
+// That includes the one being edited, which has no id yet.
+export function toPermalinkPalette(activePalette, density, rotate) {
+    const params = { id: activePalette.id, density, rotate }
+    if (!isBuiltInPalette(activePalette.id)) {
+        const exported = activePalette.export()
+        params.id = undefined
+        params.colors = exported.colors
+        params.mirror = exported.mirror
+    }
+    return params
+}
+
 export function initPallet(palette, density, rotate, exp, max_iter) {
     const rgbaBuffer = new Uint8ClampedArray(max_iter * 4 + 20)
     // 0 and 1 = transparent (skipped), 2 and 3 = black (in set)
@@ -56,12 +69,13 @@ export function palettes() {
     return PALETTES.slice().concat(loadCustomPalettes())
 }
 
+// Takes the palette itself, not an export of it, so the caller keeps a palette with a usable id.
 export function addCustomPalette(palette) {
+    const exported = palette.export()
     let arr = loadCustomPalettesRaw()
-    arr.push({name: palette.name, colors: palette.colors, mirror: palette.mirror})
+    arr.push({name: exported.name, colors: exported.colors, mirror: exported.mirror})
     palette.id = `custom_${arr.length - 1}`
     saveCustomPalettes(arr)
-    return palette.id
 }
 
 export function deleteCustomPalette(id) {
