@@ -7,6 +7,11 @@ export function getPalette(id) {
     return ORIGINAL
 }
 
+// Built-in palettes are the same in every browser, custom ones are not.
+export function isBuiltInPalette(id) {
+    return PALETTES.some(p => p.id === id)
+}
+
 export function initPallet(palette, density, rotate, exp, max_iter) {
     const rgbaBuffer = new Uint8ClampedArray(max_iter * 4 + 20)
     // 0 and 1 = transparent (skipped), 2 and 3 = black (in set)

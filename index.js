@@ -1049,23 +1049,26 @@ function iFeelLucky() {
 function updatePermalink() {
     const url = new URL(window.location)
     const p = url.searchParams
-    let palette = {
-        id: paletteSelector.palette.id,
+    const activePalette = paletteSelector.palette
+    let paletteParams = {
+        id: activePalette.id,
         density: paletteSelector.density,
         rotate: paletteSelector.rotate,
     }
-    if (paletteSelector.palette.isCustom()) {
-        palette.id = undefined
-        const exported = paletteSelector.palette.export()
-        palette.colors = exported.colors
-        palette.mirror = exported.mirror
+    // Custom palettes only exist in the browser that created them, so their colors travel with the url.
+    // That includes the one being edited, which has no id yet.
+    if (!palette.isBuiltInPalette(activePalette.id)) {
+        paletteParams.id = undefined
+        const exported = activePalette.export()
+        paletteParams.colors = exported.colors
+        paletteParams.mirror = exported.mirror
     }
     const params = {
         center: fractal.center,
         zoom: fractal.zoom,
         max_iter: fractal.max_iter,
         smooth: fractal.smooth,
-        palette: palette
+        palette: paletteParams
     }
     p.set('params', btoa(JSON.stringify(params)))
 
