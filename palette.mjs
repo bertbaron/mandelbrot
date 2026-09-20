@@ -56,6 +56,7 @@ export function addCustomPalette(palette) {
     arr.push({name: palette.name, colors: palette.colors, mirror: palette.mirror})
     palette.id = `custom_${arr.length - 1}`
     saveCustomPalettes(arr)
+    return palette.id
 }
 
 export function deleteCustomPalette(id) {

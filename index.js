@@ -1423,7 +1423,7 @@ class CustomPaletteComponent {
             this.previousPalette = null
         } else {
             const exported = customPalette.export()
-            palette.addCustomPalette(exported)
+            customPalette.id = palette.addCustomPalette(exported)
             paletteSelector.init()
             paletteSelector.setPalette(customPalette)
             this.previousPalette = null
