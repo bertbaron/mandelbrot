@@ -1,8 +1,8 @@
 /**
  * @author Bert Baron
  */
-import * as fxp from "./fxp.mjs";
 import {smoothen, WorkerContext} from "./workerContext.mjs";
+import {mandelbrot_high_precision} from "./sharedCalculations.mjs";
 
 /**
  * Similar to MandelbrotPerturbation class. That one uses floating point numbers for fast calculations. Those numbers
@@ -250,7 +250,7 @@ export class MandelbrotPerturbationExtFloat {
         const start = performance.now()
         const rr = refr + BigInt(Math.round(dr))
         const ri = refi + BigInt(Math.round(di))
-        const [iter, zq, seq] = this.mandelbrot_high_precision(rr, ri, this.max_iter, bailout, bigScale, scale)
+        const [iter, zq, seq] = mandelbrot_high_precision(rr, ri, this.max_iter, bailout, bigScale, scale)
         let lastExp = -scale
 
         const iterations = seq.length
@@ -261,51 +261,12 @@ export class MandelbrotPerturbationExtFloat {
             const eExpDeltaFactor = 2 ** (lastExp-eExp)
             const eExpFactor = 2 ** eExp
             lastExp = eExp
-            return [zr, zi, zq, eExpFactor, eExpDeltaFactor, eExp]
+            return [zr, zi, zq * 0.000001, eExpFactor, eExpDeltaFactor, eExp]
         })
         const end = performance.now()
         this.ctx.stats.timeSpendInHighPrecision += end - start
         this.ctx.stats.numberOfHighPrecisionPoints++
         return [[dr, di], iter, zq, zs]
-    }
-
-    /**
-     * @param {BigInt} re
-     * @param {BigInt} im
-     * @param {number} max_iter
-     * @param {number} bailout
-     * @param {BigInt} bigScale
-     * @param {number} scale
-     * @returns {[number, BigInt, [number, number, zq][]]} [iterations, zq, sequence] where sequence is a list of [zr, zi, zq] tuples
-     */
-    mandelbrot_high_precision(re, im, max_iter, bailout, bigScale, scale) {
-        const scale_1 = bigScale - 1n
-        let zr = 0n
-        let zi = 0n
-        let iter = -1
-        let zrq = 0n
-        let ziq = 0n
-        let zq = 0
-        const seq = []
-        while (zq <= bailout) {
-            if (iter++ === max_iter) {
-                return [2, 0, seq]
-            }
-            zi = (zr * zi >> scale_1) + im
-            zr = zrq - ziq + re
-            zrq = (zr * zr) >> bigScale
-            ziq = (zi * zi) >> bigScale
-            const z_real = fxp.toNumber(zr, scale)
-            const z_imag = fxp.toNumber(zi, scale)
-            zq = z_real * z_real + z_imag * z_imag
-            seq.push([z_real, z_imag, zq * 0.000001])
-        }
-        zi = (zr * zi >> scale_1) + im
-        zr = zrq - ziq + re
-        const z_real = fxp.toNumber(zr, scale)
-        const z_imag = fxp.toNumber(zi, scale)
-        seq.push([z_real, z_imag, z_real * z_real + z_imag * z_imag])
-        return [iter + 4, zq, seq]
     }
 }
 

@@ -8,6 +8,7 @@ import {MandelbrotFxP} from "./mandelbrotFxP.mjs";
 import {MandelbrotPerturbation} from "./mandelbrotPerturbation.mjs";
 import {MandelbrotPerturbationExtFloat} from "./mandelbrotPerturbationExtFloat.mjs";
 import {MandelbrotWebGPU} from "./mandelbrotWebGPU.mjs";
+import {calculateGpuReference} from "./sharedCalculations.mjs";
 
 const ctx = new WorkerContext()
 
@@ -61,6 +62,11 @@ async function handleMessage(msg) {
         ctx.resetStats()
         const result = await impl.process(message)
         postMessage(result)
+    } else if (message.type === 'reference') {
+        ctx.initTask(message.jobToken)
+        const ref = calculateGpuReference(message.rr, message.ri, message.maxIter, message.bailout, message.scale, () => ctx.shouldStop())
+        const transfer = ref ? [ref.zBuffer.buffer, ref.zqErrorBoundBuffer.buffer] : []
+        postMessage({type: 'reference', id: message.id, ref}, transfer)
     }
 }
 

@@ -1,8 +1,8 @@
 /**
  * @author Bert Baron
  */
-import * as fxp from "./fxp.mjs";
 import {smoothen, WorkerContext} from "./workerContext.mjs";
+import {ReferencePointProvider} from "./referencePointProvider.mjs";
 
 const USE_GPU = true
 
@@ -17,6 +17,7 @@ export class MandelbrotWebGPU {
         this.paramHash = null
         this.jobId = null
         this.referencePoints = []
+        this.referencePointProvider = new ReferencePointProvider()
         this.devicePromise = this.initGpu()
         this.mandelbrotPipeline = this.createPipeline()
         this.running = Promise.resolve()
@@ -101,7 +102,11 @@ export class MandelbrotWebGPU {
             const y = Math.trunc(h / 2)
             const rr = refr + BigInt(Math.trunc(x / w * cWidth))
             const ri = refi + BigInt(Math.trunc(y / h * cHeight))
-            this.referencePoints.push(await this.calculate_reference(rr, ri, bigScale, scale, bailout))
+            const ref = await this.calculate_reference(rr, ri, bigScale, scale, bailout)
+            if (ref === null) return {
+                error: "Stopped"
+            }
+            this.referencePoints.push(ref)
             if (this.shouldStop()) return {
                 error: "Stopped"
             }
@@ -169,7 +174,7 @@ export class MandelbrotWebGPU {
                     const rr = refr + BigInt(Math.trunc(x / w * cWidth))
                     const ri = refi + BigInt(Math.trunc(y / h * cHeight))
                     const ref = await this.calculate_reference(rr, ri, bigScale, scale, bailout)
-                    if (this.shouldStop()) return {
+                    if (ref === null || this.shouldStop()) return {
                         error: "Stopped"
                     }
                     this.referencePoints.push(ref)
@@ -288,69 +293,12 @@ export class MandelbrotWebGPU {
      */
     async calculate_reference(rr, ri, bigScale, scale, bailout) {
         const start = performance.now()
-        const [iter, zq, seq] = this.mandelbrot_high_precision(rr, ri, this.max_iter, bailout, bigScale, scale)
-
-        const iterations = seq.length
-        const zBuffer = new Float32Array(iterations*2)
-        const zqErrorBoundBuffer = new Float32Array(iterations)
-
-        seq.forEach(([zr, zi, zq], idx) => {
-            zBuffer[idx*2] = zr
-            zBuffer[idx*2+1] = zi
-            zqErrorBoundBuffer[idx] = zq * 0.000001
-        })
+        const ref = await this.referencePointProvider.calculate(rr, ri, this.max_iter, bailout, scale, this.currentTask)
         const end = performance.now()
         // console.log(`Calculated reference point in ${(end - start).toFixed(1)}ms`)
         // this.ctx.stats.timeSpendInHighPrecision += end - start
         // this.ctx.stats.numberOfHighPrecisionPoints++
-        return {
-            rr,
-            ri,
-            iter,
-            zq,
-            size: zqErrorBoundBuffer.length,
-            zBuffer,
-            zqErrorBoundBuffer,
-        }
-    }
-
-    /**
-     * @param {BigInt} re
-     * @param {BigInt} im
-     * @param {number} max_iter
-     * @param {number} bailout
-     * @param {BigInt} bigScale
-     * @param {number} scale
-     * @returns {[number, BigInt, [number, number, zq][]]} [iterations, zq, sequence] where sequence is a list of [zr, zi, zq] tuples
-     */
-    mandelbrot_high_precision(re, im, max_iter, bailout, bigScale, scale) {
-        const scale_1 = bigScale - 1n
-        let zr = 0n
-        let zi = 0n
-        let iter = -1
-        let zrq = 0n
-        let ziq = 0n
-        let zq = 0
-        const seq = []
-        while (zq <= bailout) {
-            if (iter++ === max_iter) {
-                return [2, 0, seq]
-            }
-            zi = (zr * zi >> scale_1) + im
-            zr = zrq - ziq + re
-            zrq = (zr * zr) >> bigScale
-            ziq = (zi * zi) >> bigScale
-            const z_real = fxp.toNumber(zr, scale)
-            const z_imag = fxp.toNumber(zi, scale)
-            zq = z_real * z_real + z_imag * z_imag
-            seq.push([z_real, z_imag, zq])
-        }
-        zi = (zr * zi >> scale_1) + im
-        zr = zrq - ziq + re
-        const z_real = fxp.toNumber(zr, scale)
-        const z_imag = fxp.toNumber(zi, scale)
-        seq.push([z_real, z_imag, z_real * z_real + z_imag * z_imag])
-        return [iter + 4, zq, seq]
+        return ref
     }
 }
 
