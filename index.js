@@ -3,6 +3,7 @@
  */
 import * as fxp from './fxp.mjs'
 import * as palette from './palette.mjs'
+import {encodePermalink, decodePermalink, decodeLegacyPermalink} from './permalink.mjs'
 import * as mgpu from './mandelbrotWebGPU.mjs'
 import {WorkerContext} from "./workerContext.mjs";
 
@@ -1061,14 +1062,15 @@ async function iFeelLucky() {
 function updatePermalink() {
     const url = new URL(window.location)
     const p = url.searchParams
-    const params = {
+    const encoded = encodePermalink({
         center: fractal.center,
         zoom: fractal.zoom,
         max_iter: fractal.max_iter,
         smooth: fractal.smooth,
         palette: palette.toPermalinkPalette(paletteSelector.palette, paletteSelector.density, paletteSelector.rotate)
-    }
-    p.set('params', btoa(JSON.stringify(params)))
+    })
+    for (const key of ['params', 'p', 'c', 'cm']) p.delete(key)
+    for (const [key, value] of Object.entries(encoded)) p.set(key, value)
 
     window.history.replaceState({}, '', url)
 }
@@ -1081,9 +1083,14 @@ function initUI() {
 function init() {
     initUI()
     const url = new URL(window.location)
-    const params = url.searchParams.get('params')
-    if (params) {
-        initFromParams(params)
+    const legacyParams = url.searchParams.get('params')
+    try {
+        const params = decodePermalink(url.searchParams) ?? (legacyParams && decodeLegacyPermalink(legacyParams))
+        if (params) {
+            applyParams(params)
+        }
+    } catch (e) {
+        console.warn('Ignoring invalid permalink', e)
     }
     // resizeTmpCanvas()
     onResize()
@@ -1099,9 +1106,12 @@ function init() {
 }
 
 function initFromParams(params) {
-    const p = JSON.parse(atob(params))
-    fractal.setZoom(fxp.fromJSON(p.zoom))
-    fractal.setCenter(p.center.map(fxp.fromJSON))
+    applyParams(decodeLegacyPermalink(params))
+}
+
+function applyParams(p) {
+    fractal.setZoom(p.zoom)
+    fractal.setCenter(p.center)
     fractal.max_iter = p.max_iter
     fractal.smooth = p.smooth
     if (p.palette) {
