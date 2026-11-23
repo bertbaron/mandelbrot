@@ -14,6 +14,10 @@ import {mandelbrot_high_precision} from "./sharedCalculations.mjs";
  * We should try to share code with MandelbrotPerturbation of course, but need to test if this doesn't affect performance
  * as Javascript/jit optimization might be affected by the different types.
  */
+const RESCALE_BITS = 500
+const RESCALE_LIMIT = 2 ** RESCALE_BITS
+const RESCALE_DOWN = 2 ** -RESCALE_BITS
+
 export class MandelbrotPerturbationExtFloat {
     /**
      * @param {WorkerContext} ctx
@@ -174,18 +178,20 @@ export class MandelbrotPerturbationExtFloat {
      * @param {number} dci
      * @param {number} max_iter
      * @param {number} bailout
-     * @param {[number, number, number, number, number, number, number][]} zs (zr, zi, zq, zExp, zExpFactor, zEzpDeltaFactor, dExpZEzpDeltaFactor)[]
+     * @param {{zr: Float64Array, zi: Float64Array, zqErrorBound: Float64Array, length: number}} zs reference orbit
      * @returns {[number, number]} [iter, zq]
      */
     mandlebrot_perturbation(dExp, dcr, dci, max_iter, bailout, zs) {
-        const exponents = []
-        const guessedExponents = []
-        exponents.push(Math.max(realExp(dcr, dExp), realExp(dci, dExp)))
-        guessedExponents.push(dExp)
+        const zrs = zs.zr
+        const zis = zs.zi
+        const zqErrorBounds = zs.zqErrorBound
+        const length = zs.length
 
         // ε₀ = δ
         let ezr = dcr
         let ezi = dci
+        let eExp = dExp
+        let eExpFactor = 2 ** eExp  // may underflow to 0, which is fine: ε is then negligible compared to Z
 
         let iter = -1
         let zzq = 0
@@ -193,31 +199,28 @@ export class MandelbrotPerturbationExtFloat {
             if (iter++ === max_iter) {
                 return [2, 0]
             }
-            if (iter >= zs.length) {
+            if (iter >= length) {
                 return [-1, zzq]
             }
 
-            // Zₙ
-            const _zsvalues = zs[iter]
-            const eExpFactor = _zsvalues[3]  // 2 ** eExp
-            const eExpDeltaFactor = _zsvalues[4]  // 2 ** (eExp - newEExp)
-            ezr *= eExpDeltaFactor
-            ezi *= eExpDeltaFactor
-            dcr *= eExpDeltaFactor
-            dci *= eExpDeltaFactor
-            const eExp = _zsvalues[5]
-            exponents.push(Math.max(realExp(ezr, eExp), realExp(ezi, eExp)))
-            guessedExponents.push(eExp)
+            if (ezr > RESCALE_LIMIT || ezr < -RESCALE_LIMIT || ezi > RESCALE_LIMIT || ezi < -RESCALE_LIMIT) {
+                ezr *= RESCALE_DOWN
+                ezi *= RESCALE_DOWN
+                dcr *= RESCALE_DOWN
+                dci *= RESCALE_DOWN
+                eExp += RESCALE_BITS
+                eExpFactor = 2 ** eExp
+            }
 
-            const zr = _zsvalues[0]
-            const zi = _zsvalues[1]
-            const zqErrorBound = _zsvalues[2]
+            // Zₙ
+            const zr = zrs[iter]
+            const zi = zis[iter]
 
             // Z'ₙ = Zₙ + εₙ
             const zzr = zr + ezr * eExpFactor
             const zzi = zi + ezi * eExpFactor
             zzq = zzr * zzr + zzi * zzi
-            if (zzq < zqErrorBound) {
+            if (zzq < zqErrorBounds[iter]) {
                 return [-1, 0]
             }
 
@@ -228,10 +231,6 @@ export class MandelbrotPerturbationExtFloat {
             const _ezi = zr_ezr_2 * ezi + zi_ezi_2 * ezr
             ezr = _ezr + dcr
             ezi = _ezi + dci
-        }
-        if (this.debug) {
-            console.log(exponents.join(","))
-            console.log(guessedExponents.join(","))
         }
         return [iter + 4, zzq]
     }
@@ -244,45 +243,29 @@ export class MandelbrotPerturbationExtFloat {
      * @param {BigInt} bigScale
      * @param {number} scale
      * @param {number} bailout
-     * @returns {[[number, number], number, number, [number, number, number, number, number][]]} ((rr, ri), iter, zq, (zr, zi, zqErrorBound, eExpFactor, eEzpDeltaFactor)[])
+     * @returns {[[number, number], number, number, {zr: Float64Array, zi: Float64Array, zqErrorBound: Float64Array, length: number}]} ((dr, di), iter, zq, reference orbit)
      */
     calculate_reference(refr, refi, dr, di, bigScale, scale, bailout) {
         const start = performance.now()
         const rr = refr + BigInt(Math.round(dr))
         const ri = refi + BigInt(Math.round(di))
         const [iter, zq, seq] = mandelbrot_high_precision(rr, ri, this.max_iter, bailout, bigScale, scale)
-        let lastExp = -scale
-
-        const iterations = seq.length
-        const zs = seq.map(([zr, zi, zq], idx) => {
-            // No mathematical proof whatsoever! It may be impossible to 'predict' the exponent of epsilon good enough,
-            // if it drifts more than approx. 1000 from the actual exp of the error, the results may become incorrect
-            const eExp = Math.round(Math.pow(idx / iterations, 1.75) * scale - scale)
-            const eExpDeltaFactor = 2 ** (lastExp-eExp)
-            const eExpFactor = 2 ** eExp
-            lastExp = eExp
-            return [zr, zi, zq * 0.000001, eExpFactor, eExpDeltaFactor, eExp]
-        })
+        const length = seq.length
+        const zs = {
+            zr: new Float64Array(length),
+            zi: new Float64Array(length),
+            zqErrorBound: new Float64Array(length),
+            length,
+        }
+        for (let idx = 0; idx < length; idx++) {
+            const [zr, zi, zq] = seq[idx]
+            zs.zr[idx] = zr
+            zs.zi[idx] = zi
+            zs.zqErrorBound[idx] = zq * 0.000001
+        }
         const end = performance.now()
         this.ctx.stats.timeSpendInHighPrecision += end - start
         this.ctx.stats.numberOfHighPrecisionPoints++
         return [[dr, di], iter, zq, zs]
     }
-}
-
-const realExpBuffer = new Float64Array(1)
-const realExpData = new DataView(realExpBuffer.buffer)
-
-export function realExp(value, xExp) {
-    realExpBuffer[0] = value
-    let bits = realExpData.getUint32(4, true)
-    return ((bits & 0x7FF00000) >> 20) - 1023 + xExp
-}
-
-function binary(value, bits) {
-    let result = ''
-    for (let i = bits - 1; i >= 0; i--) {
-        result += (value & (1 << i)) ? '1' : '0'
-    }
-    return result
 }
