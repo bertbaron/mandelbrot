@@ -6,6 +6,9 @@ import {ReferencePointProvider} from "./referencePointProvider.mjs";
 
 const USE_GPU = true
 
+// Number of reference points that are calculated at the same time (each in its own web worker)
+const REFERENCE_POINTS_PER_ROUND = 4
+
 export class MandelbrotWebGPU {
     /**
      * @param {WorkerContext} ctx
@@ -17,7 +20,7 @@ export class MandelbrotWebGPU {
         this.paramHash = null
         this.jobId = null
         this.referencePoints = []
-        this.referencePointProvider = new ReferencePointProvider()
+        this.referencePointProvider = new ReferencePointProvider(REFERENCE_POINTS_PER_ROUND)
         this.devicePromise = this.initGpu()
         this.mandelbrotPipeline = this.createPipeline()
         this.running = Promise.resolve()
@@ -166,23 +169,27 @@ export class MandelbrotWebGPU {
             indices = remainingIndices
 
             if (indices.length > 0) {
-                const newRefPoint = indices[Math.trunc(indices.length / 2)]
                 refIdx++
                 if (refIdx >= this.referencePoints.length) {
-                    const x = newRefPoint % w
-                    const y = Math.floor(newRefPoint / w)
-                    const rr = refr + BigInt(Math.trunc(x / w * cWidth))
-                    const ri = refi + BigInt(Math.trunc(y / h * cHeight))
-                    const ref = await this.calculate_reference(rr, ri, bigScale, scale, bailout)
-                    if (ref === null || this.shouldStop()) return {
+                    // Calculate several reference points at the same time, picked evenly spread from the remaining pixels
+                    const count = Math.min(REFERENCE_POINTS_PER_ROUND, indices.length)
+                    const newRefPoints = Array.from({length: count}, (_, i) => indices[Math.trunc((i + 0.5) * indices.length / count)])
+                    const refs = await Promise.all(newRefPoints.map(newRefPoint => {
+                        const x = newRefPoint % w
+                        const y = Math.floor(newRefPoint / w)
+                        const rr = refr + BigInt(Math.trunc(x / w * cWidth))
+                        const ri = refi + BigInt(Math.trunc(y / h * cHeight))
+                        return this.calculate_reference(rr, ri, bigScale, scale, bailout)
+                    }))
+                    if (refs.includes(null) || this.shouldStop()) return {
                         error: "Stopped"
                     }
-                    this.referencePoints.push(ref)
+                    this.referencePoints.push(...refs)
 
-                    // remove the reference point from indices to ensure progress even when perturbation fails
-                    // we will add it later by storing the result in refValues
-                    indices = indices.filter(idx => idx !== newRefPoint)
-                    refValues.push([newRefPoint, ref.iter, ref.zq])
+                    // remove the reference points from indices to ensure progress even when perturbation fails
+                    // we will add them later by storing the result in refValues
+                    indices = indices.filter(idx => !newRefPoints.includes(idx))
+                    newRefPoints.forEach((newRefPoint, i) => refValues.push([newRefPoint, refs[i].iter, refs[i].zq]))
                 }
                 // this.ctx.stats.numberOfLowPrecisionMisses += indices.length
             }
