@@ -151,8 +151,6 @@ export class MandelbrotWebGPU {
                 skipTopLeft,
             })
             const remainingIndices = result.indices
-            values = result.values
-            smooth = result.smooth
             const end = performance.now()
             if (passnr % 25 === 0) {
                 console.log(`Pass ${passnr} of ${indices.length} pixels took ${(end - start).toFixed(1)}ms`)
@@ -195,6 +193,10 @@ export class MandelbrotWebGPU {
             }
             solved = indices.length === 0
             const now = performance.now()
+            if (solved || now - lastUpdate > 100) {
+                // values and smooth are only copied back from the GPU when we need them
+                ({values, smooth} = await this.mandelbrotPipeline.readValues())
+            }
             if (!solved && now - lastUpdate > 100) {
                 this.intermediateUpdate(values, smooth)
                 lastUpdate = now
@@ -420,8 +422,6 @@ class MandelbrotPipeline {
         const maxWorkersCount = 2 ** 18
         const indices = data.indices
         const remainingIndices = []
-        let values = null
-        let smooth = null
         for (let i = 0; i < indices.length; i += maxWorkersCount) {
             const chunk = indices.slice(i, i + maxWorkersCount)
             const start = performance.now()
@@ -438,13 +438,9 @@ class MandelbrotPipeline {
                     indices: [],
                 }
             }
-            values = remainingChunk.values
-            smooth = remainingChunk.smooth
         }
         return {
             indices: new Uint32Array(remainingIndices),
-            values,
-            smooth,
         }
     }
 
@@ -489,13 +485,6 @@ class MandelbrotPipeline {
         pass.end();
 
         encoder.copyBufferToBuffer(this.indexBuffer, 0, this.resultIndexBuffer, 0, indices.length * 4);
-        encoder.copyBufferToBuffer(this.valuesBuffer, 0, this.resultValuesBuffer, 0, this.resultValuesBuffer.size);
-        // encoder.copyBufferToBuffer(this.debugBuffer, 0, this.resultDebugBuffer, 0, this.resultDebugBuffer.size);
-
-        if (data.doSmooth) {
-            encoder.copyBufferToBuffer(this.smoothBuffer, 0, this.resultSmoothBuffer, 0, this.resultSmoothBuffer.size);
-        }
-
         const commandBuffer = encoder.finish();
         device.queue.submit([commandBuffer]);
 
@@ -509,35 +498,35 @@ class MandelbrotPipeline {
         }
         this.resultIndexBuffer.unmap();
 
-        const values = new Int32Array(this.resultValuesBuffer.size / 4)
-        await this.resultValuesBuffer.mapAsync(GPUMapMode.READ)
-        values.set(new Int32Array(this.resultValuesBuffer.getMappedRange()))
-        this.resultValuesBuffer.unmap();
+        return {
+            indices: remainingIndices,
+        }
+    }
 
-        let smooth = new Uint8ClampedArray(this.resultSmoothBuffer.size / 4)
+    /**
+     * Copies the values and smooth buffers back from the GPU
+     * @returns {Promise<{values: Int32Array, smooth: Uint8ClampedArray}>}
+     */
+    async readValues() {
+        const device = await this.devicePromise
+        const encoder = device.createCommandEncoder()
+        encoder.copyBufferToBuffer(this.valuesBuffer, 0, this.resultValuesBuffer, 0, this.resultValuesBuffer.size)
+        if (this.doSmooth) {
+            encoder.copyBufferToBuffer(this.smoothBuffer, 0, this.resultSmoothBuffer, 0, this.resultSmoothBuffer.size)
+        }
+        device.queue.submit([encoder.finish()])
+
+        await this.resultValuesBuffer.mapAsync(GPUMapMode.READ)
+        const values = new Int32Array(this.resultValuesBuffer.getMappedRange().slice(0))
+        this.resultValuesBuffer.unmap()
+
+        const smooth = new Uint8ClampedArray(this.resultSmoothBuffer.size / 4)
         if (this.doSmooth) {
             await this.resultSmoothBuffer.mapAsync(GPUMapMode.READ)
             smooth.set(new Int32Array(this.resultSmoothBuffer.getMappedRange()))
             this.resultSmoothBuffer.unmap()
         }
-
-        // const debug = new Float32Array(this.resultDebugBuffer.size / 4)
-        // await this.resultDebugBuffer.mapAsync(GPUMapMode.READ)
-        // debug.set(new Float32Array(this.resultDebugBuffer.getMappedRange()))
-        // this.resultDebugBuffer.unmap()
-        //
-        // const debugStr = []
-        // for (let value of debug) {
-        //     // debugStr.push(`${value.toExponential(2)}`)
-        //     debugStr.push(`${value}`)
-        // }
-        // console.log(`debug: ${debugStr}`)
-
-        return {
-            indices: remainingIndices,
-            values,
-            smooth,
-        }
+        return {values, smooth}
     }
 
     /**
@@ -550,6 +539,9 @@ class MandelbrotPipeline {
         this.zBuffer.destroy()
         this.zqErrorBoundBuffer.destroy()
         this.smoothBuffer.destroy()
+        this.resultIndexBuffer.destroy()
+        this.resultValuesBuffer.destroy()
+        this.resultSmoothBuffer.destroy()
         // this.debugBuffer.destroy()
     }
 
@@ -628,17 +620,18 @@ class MandelbrotPipeline {
               
                 var ez = dc;
                 
+                // one check per iteration for both max_iter and the end of the reference orbit
+                let limit = min(spec.max_iter, spec.refSize);
                 var iter = -1;
                 var zzq = 0.0;
                 while (zzq <= ${bailout}) {
                     iter = iter + 1;
-                    if (iter == spec.max_iter) {
-                        values[i] = 2;
-                        smoothBuffer[i] = 0;
-                        indexBuffer[iid] = -1;
-                        return;
-                    }
-                    if (iter >= spec.refSize) {
+                    if (iter >= limit) {
+                        if (iter == spec.max_iter) {
+                            values[i] = 2;
+                            smoothBuffer[i] = 0;
+                            indexBuffer[iid] = -1;
+                        }
                         return;
                     }
                     
