@@ -10,17 +10,18 @@ globalThis.localStorage = {
 }
 
 const palette = await import('../palette.mjs')
+const {decodePermalink} = await import('../permalink.mjs')
 
 const source = fs.readFileSync(new URL('../favorites.js', import.meta.url), 'utf8')
 const arrayBody = source.slice(source.indexOf('const FAVORITES = ['), source.indexOf('\n]'))
-const entries = [...arrayBody.matchAll(/"([A-Za-z0-9+/=]+)"/g)].map(m => m[1])
-const decoded = entries.map(entry => JSON.parse(Buffer.from(entry, 'base64').toString()))
+const entries = [...arrayBody.matchAll(/"([^"]+)"/g)].map(m => m[1])
+const decoded = entries.map(entry => decodePermalink(new URLSearchParams(entry)))
 
 test('the favourites array is not empty', () => {
     assert.ok(entries.length > 0)
 })
 
-test('every favourite is valid base64 holding the expected parameters', () => {
+test('every favourite is a valid permalink holding the expected parameters', () => {
     decoded.forEach((params, i) => {
         assert.ok(params.center && params.center.length === 2, `entry ${i}: center`)
         assert.ok(params.zoom, `entry ${i}: zoom`)

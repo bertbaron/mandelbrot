@@ -1054,7 +1054,7 @@ if (window.requestIdleCallback) {
 async function iFeelLucky() {
     const favorites = await loadFavorites()
     const favorite = favorites.getRandomFavorite()
-    initFromParams(favorite)
+    applyParams(decodePermalink(new URLSearchParams(favorite)))
     fractal.initPallete()
     redraw()
 }
@@ -1103,10 +1103,6 @@ function init() {
     showSettingsContainer()
     initListeners()
     redraw()
-}
-
-function initFromParams(params) {
-    applyParams(decodeLegacyPermalink(params))
 }
 
 function applyParams(p) {

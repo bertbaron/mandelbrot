@@ -1,6 +1,5 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
 import * as fxp from '../fxp.mjs'
 import {encodePermalink, decodePermalink, decodeLegacyPermalink} from '../permalink.mjs'
 
@@ -63,19 +62,27 @@ test('a url without new style params gives null', () => {
     assert.equal(decodePermalink(new URLSearchParams('params=abc')), null)
 })
 
-test('every favourite converts to a shorter, identical-center permalink', () => {
-    const source = fs.readFileSync(new URL('../favorites.js', import.meta.url), 'utf8')
-    const entries = [...source.matchAll(/"([A-Za-z0-9+/=]+)"/g)].map(m => m[1])
-    assert.ok(entries.length > 0)
-    for (const entry of entries) {
-        const legacy = decodeLegacyPermalink(entry)
-        const palette = legacy.palette.colors
-            ? {...legacy.palette}
-            : {id: legacy.palette.id, density: legacy.palette.density, rotate: legacy.palette.rotate}
-        const {query, decoded} = roundtrip({...legacy, palette})
+// Urls as written by the previous version: base64 of a JSON document
+const LEGACY_BUILT_IN = 'eyJjZW50ZXIiOlt7ImJpZ0ludCI6Ii01MTAzNTk3MzI2OTY5OTY3NzAiLCJzY2FsZSI6NTh9LHsiYmlnSW50IjoiLTQ3MDc1NTI5NjU0NDU3NDQiLCJzY2FsZSI6NTh9XSwiem9vbSI6eyJiaWdJbnQiOiIxODA0MjE1MzE1Nzc4Mjk4Mzc4MzU0NTA5OTQ0NTEzIiwic2NhbGUiOjU4fSwibWF4X2l0ZXIiOjM0MDAsInNtb290aCI6dHJ1ZSwicGFsZXR0ZSI6eyJpZCI6Im9yaWdpbmFsIiwiZGVuc2l0eSI6Ii0yMiIsInJvdGF0ZSI6Ii0xODAifX0='
+const LEGACY_EMBEDDED = 'eyJjZW50ZXIiOlt7ImJpZ0ludCI6Ii0zNjU3OTYxOTc4Njg4NjQ1MzgiLCJzY2FsZSI6NTh9LHsiYmlnSW50IjoiLTUxOTQ3MzA5NjM4OTgzNzc0Iiwic2NhbGUiOjU4fV0sInpvb20iOnsiYmlnSW50IjoiMTA5NTc0NjQ1NjY5MjM1MTgwODA5MjU0NDkxNTkiLCJzY2FsZSI6NTh9LCJtYXhfaXRlciI6MjcwMCwic21vb3RoIjp0cnVlLCJwYWxldHRlIjp7ImRlbnNpdHkiOiItMjkiLCJyb3RhdGUiOiItNiIsImNvbG9ycyI6WyIjNDIxZTBmIiwiIzE5MDcxYSIsIiMwOTAxMmYiLCIjMDQwNDQ5IiwiIzAwMDc2NCIsIiMwYzJjOGEiLCIjMTg1MmIxIiwiIzM5N2RkMSIsIiM4NmI1ZTUiLCIjZDNlY2Y4IiwiI2YxZTliZiIsIiNmOGM5NWYiLCIjZmZhYTAwIiwiI2NjODAwMCIsIiM5OTU3MDAiLCIjNmEzNDAzIl0sIm1pcnJvciI6ZmFsc2V9fQ=='
+
+test('legacy permalinks are still readable', () => {
+    const builtIn = decodeLegacyPermalink(LEGACY_BUILT_IN)
+    assert.equal(builtIn.center.length, 2)
+    assert.equal(builtIn.max_iter, 3400)
+    assert.equal(builtIn.palette.id, 'original')
+    assert.equal(builtIn.palette.density, '-22')
+    const embedded = decodeLegacyPermalink(LEGACY_EMBEDDED)
+    assert.ok(embedded.palette.colors.length > 0)
+})
+
+test('legacy permalinks convert to a shorter, identical-center permalink', () => {
+    for (const legacyParam of [LEGACY_BUILT_IN, LEGACY_EMBEDDED]) {
+        const legacy = decodeLegacyPermalink(legacyParam)
+        const {query, decoded} = roundtrip(legacy)
         assert.equal(decoded.center[0].bigInt, legacy.center[0].bigInt)
         assert.equal(decoded.center[1].bigInt, legacy.center[1].bigInt)
-        assert.ok(query.length < entry.length, `${query.length} >= ${entry.length}`)
+        assert.ok(query.length < legacyParam.length)
     }
 })
 
